@@ -1,0 +1,33 @@
+<?xml version='1.0' encoding='utf-8'?>
+<manifest updated="2026-03-02T18:26:51.513549">
+    <model class_name="A" version="A-01">
+        <pkl_path>test_models\A-01.pkl</pkl_path>
+        <metadata>
+            <kernel>rbf</kernel>
+            <gamma>scale</gamma>
+            <nu>0.1</nu>
+            <n_samples>200</n_samples>
+            <n_features>2</n_features>
+            <trained_at>2026-03-02T18:26:51.506256</trained_at>
+        </metadata>
+        <performance>
+            <inlier_ratio>0.86</inlier_ratio>
+            <n_support_vectors>30</n_support_vectors>
+        </performance>
+    </model>
+    <model class_name="B" version="B-01">
+        <pkl_path>test_models\B-01.pkl</pkl_path>
+        <metadata>
+            <kernel>rbf</kernel>
+            <gamma>scale</gamma>
+            <nu>0.1</nu>
+            <n_samples>200</n_samples>
+            <n_features>2</n_features>
+            <trained_at>2026-03-02T18:26:51.511536</trained_at>
+        </metadata>
+        <performance>
+            <inlier_ratio>0.86</inlier_ratio>
+            <n_support_vectors>30</n_support_vectors>
+        </performance>
+    </model>
+</manifest>

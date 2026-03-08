@@ -1,0 +1,78 @@
+<?xml version='1.0' encoding='utf-8'?>
+<manifest updated="2026-03-05T15:50:17.420140">
+    <model class_name="GBP" version="GBP-02">
+        <pkl_path>models\GBP-02.pkl</pkl_path>
+        <metadata>
+            <kernel>rbf</kernel>
+            <gamma>scale</gamma>
+            <nu>0.1</nu>
+            <n_samples>4</n_samples>
+            <n_features>10</n_features>
+            <trained_at>2026-03-05T15:41:42.805657</trained_at>
+        </metadata>
+        <performance>
+            <inlier_ratio>0.25</inlier_ratio>
+            <n_support_vectors>4</n_support_vectors>
+        </performance>
+    </model>
+    <model class_name="USD" version="USD-03">
+        <pkl_path>models\USD-03.pkl</pkl_path>
+        <metadata>
+            <kernel>rbf</kernel>
+            <gamma>scale</gamma>
+            <nu>0.1</nu>
+            <n_samples>14</n_samples>
+            <n_features>10</n_features>
+            <trained_at>2026-03-05T15:50:17.413949</trained_at>
+        </metadata>
+        <performance>
+            <inlier_ratio>0.8125</inlier_ratio>
+            <n_support_vectors>14</n_support_vectors>
+        </performance>
+    </model>
+    <model class_name="CAD" version="CAD-03">
+        <pkl_path>models\CAD-03.pkl</pkl_path>
+        <metadata>
+            <kernel>rbf</kernel>
+            <gamma>scale</gamma>
+            <nu>0.1</nu>
+            <n_samples>4</n_samples>
+            <n_features>10</n_features>
+            <trained_at>2026-03-05T15:48:30.888709</trained_at>
+        </metadata>
+        <performance>
+            <inlier_ratio>0.5</inlier_ratio>
+            <n_support_vectors>4</n_support_vectors>
+        </performance>
+    </model>
+    <model class_name="AUD" version="AUD-02">
+        <pkl_path>models\AUD-02.pkl</pkl_path>
+        <metadata>
+            <kernel>rbf</kernel>
+            <gamma>scale</gamma>
+            <nu>0.1</nu>
+            <n_samples>5</n_samples>
+            <n_features>10</n_features>
+            <trained_at>2026-03-05T15:48:19.011788</trained_at>
+        </metadata>
+        <performance>
+            <inlier_ratio>0.75</inlier_ratio>
+            <n_support_vectors>5</n_support_vectors>
+        </performance>
+    </model>
+    <model class_name="NZD" version="NZD-02">
+        <pkl_path>models\NZD-02.pkl</pkl_path>
+        <metadata>
+            <kernel>rbf</kernel>
+            <gamma>scale</gamma>
+            <nu>0.1</nu>
+            <n_samples>4</n_samples>
+            <n_features>10</n_features>
+            <trained_at>2026-03-05T15:48:23.851131</trained_at>
+        </metadata>
+        <performance>
+            <inlier_ratio>0.5</inlier_ratio>
+            <n_support_vectors>4</n_support_vectors>
+        </performance>
+    </model>
+</manifest>

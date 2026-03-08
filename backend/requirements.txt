@@ -1,0 +1,27 @@
+# Backend Dependencies – mOC-iSVM
+# Python 3.10
+
+# Web Framework
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==3.2.2
+python-multipart==0.0.9
+
+# Database
+sqlalchemy==2.0.30
+
+# Environment
+python-dotenv==1.0.1
+
+# ML Core
+scikit-learn==1.5.0
+numpy==1.26.4
+pandas==2.2.2
+joblib==1.4.2
+
+# Visualization (optional – for server-side plots)
+matplotlib==3.9.0

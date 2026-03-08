@@ -1,0 +1,59 @@
+﻿=== BẮT ĐẦU KIỂM THỬ INFERENCE (OVR) ===
+
+1. Đọc file Global Manifest: models/global_manifest.xml
+  [Load] ✓ Đã load 'GBP-02' từ models\GBP-02.pkl
+[Load] Load thành công mô hình lớp 'GBP' v. GBP-02
+  [Load] ✓ Đã load 'USD-03' từ models\USD-03.pkl
+[Load] Load thành công mô hình lớp 'USD' v. USD-03
+  [Load] ✓ Đã load 'CAD-03' từ models\CAD-03.pkl
+[Load] Load thành công mô hình lớp 'CAD' v. CAD-03
+  [Load] ✓ Đã load 'AUD-02' từ models\AUD-02.pkl
+[Load] Load thành công mô hình lớp 'AUD' v. AUD-02
+  [Load] ✓ Đã load 'NZD-02' từ models\NZD-02.pkl
+[Load] Load thành công mô hình lớp 'NZD' v. NZD-02
+
+2. Tạo tập dữ liệu kiểm thử (Test Set) bao gồm các lớp và nhiễu ('unknown')
+Tổng số mẫu test: 32
+
+3. Bắt đầu dự đoán (OvR Logic)...
+
+=== BẢNG KẾT QUẢ DỰ ĐOÁN ===
+----------------------------------------------------------------------------------------------------
+Sample IDX | True (Mock)     | Predicted       | Max Score  | Scores
+----------------------------------------------------------------------------------------------------
+Sample 0   | GBP             | unknown         [✗] |    -0.93 | GBP: -0.93, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 1   | GBP             | USD             [✗] |     0.76 | GBP: -0.36, USD: 0.76, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 2   | GBP             | GBP             [✓] |     0.50 | GBP: 0.50, USD: 0.26, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 3   | GBP             | GBP             [✓] |     1.00 | GBP: 1.00, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 4   | USD             | unknown         [✗] |    -0.00 | GBP: -1.00, USD: -0.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 5   | USD             | unknown         [✗] |    -0.01 | GBP: -1.00, USD: -0.01, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 6   | USD             | unknown         [✗] |    -0.00 | GBP: -1.00, USD: -0.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 7   | USD             | unknown         [✗] |    -0.00 | GBP: -1.00, USD: -0.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 8   | USD             | unknown         [✗] |    -0.01 | GBP: -1.00, USD: -0.01, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 9   | CAD             | USD             [✗] |     0.65 | GBP: -1.00, USD: 0.65, CAD: -0.03, AUD: -1.00, NZD: -1.00
+Sample 10  | CAD             | CAD             [✓] |     0.94 | GBP: -1.00, USD: -1.00, CAD: 0.94, AUD: -1.00, NZD: 0.91
+Sample 11  | CAD             | CAD             [✓] |     1.00 | GBP: -1.00, USD: 0.09, CAD: 1.00, AUD: -1.00, NZD: -1.00
+Sample 12  | CAD             | USD             [✗] |     0.66 | GBP: -1.00, USD: 0.66, CAD: -0.08, AUD: -1.00, NZD: -1.00
+Sample 13  | AUD             | AUD             [✓] |     1.00 | GBP: -1.00, USD: 0.51, CAD: -1.00, AUD: 1.00, NZD: -1.00
+Sample 14  | AUD             | AUD             [✓] |     0.83 | GBP: -1.00, USD: -0.55, CAD: -1.00, AUD: 0.83, NZD: -1.00
+Sample 15  | AUD             | GBP             [✗] |     1.00 | GBP: 1.00, USD: 0.43, CAD: -1.00, AUD: -0.03, NZD: -1.00
+Sample 16  | AUD             | AUD             [✓] |     1.00 | GBP: -1.00, USD: 0.60, CAD: -1.00, AUD: 1.00, NZD: -1.00
+Sample 17  | AUD             | AUD             [✓] |     1.00 | GBP: -1.00, USD: 0.49, CAD: -1.00, AUD: 1.00, NZD: -1.00
+Sample 18  | NZD             | USD             [✗] |     0.49 | GBP: -1.00, USD: 0.49, CAD: -1.00, AUD: -1.00, NZD: 0.05
+Sample 19  | NZD             | NZD             [✓] |     1.00 | GBP: -1.00, USD: 0.04, CAD: -1.00, AUD: -1.00, NZD: 1.00
+Sample 20  | NZD             | CAD             [✗] |     1.00 | GBP: -1.00, USD: -1.00, CAD: 1.00, AUD: -1.00, NZD: 1.00
+Sample 21  | NZD             | USD             [✗] |     0.11 | GBP: -1.00, USD: 0.11, CAD: -1.00, AUD: -1.00, NZD: -0.80
+Sample 22  | unknown         | unknown         [✓] |    -1.00 | GBP: -1.00, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 23  | unknown         | unknown         [✓] |    -1.00 | GBP: -1.00, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 24  | unknown         | unknown         [✓] |    -1.00 | GBP: -1.00, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 25  | unknown         | unknown         [✓] |    -1.00 | GBP: -1.00, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 26  | unknown         | unknown         [✓] |    -1.00 | GBP: -1.00, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 27  | unknown         | unknown         [✓] |    -1.00 | GBP: -1.00, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 28  | unknown         | unknown         [✓] |    -1.00 | GBP: -1.00, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 29  | unknown         | unknown         [✓] |    -1.00 | GBP: -1.00, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 30  | unknown         | unknown         [✓] |    -1.00 | GBP: -1.00, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+Sample 31  | unknown         | unknown         [✓] |    -1.00 | GBP: -1.00, USD: -1.00, CAD: -1.00, AUD: -1.00, NZD: -1.00
+----------------------------------------------------------------------------------------------------
+Accuracy trên tập Dummy Test: 59.4%
+
+4. Hiển thị Scatter Plot (PCA 2D Projection)...
