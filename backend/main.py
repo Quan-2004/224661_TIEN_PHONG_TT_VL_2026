@@ -26,9 +26,8 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from backend.database import create_tables
 from backend.routers import upload, train, models_router, predict
-from backend.routers import upload_raw
+from backend.routers import upload_raw, auto_train
 from backend.schemas import ModelsListResponse
 from mocsvm.core.manifest_manager import ManifestManager
 
@@ -39,9 +38,8 @@ from mocsvm.core.manifest_manager import ManifestManager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Khởi tạo database khi server bắt đầu."""
+    """Khởi tạo các thư mục cần thiết."""
     print("  [Server] 🚀 Đang khởi động mOC-iSVM Backend...")
-    create_tables()
     # Đảm bảo thư mục cần thiết tồn tại
     os.makedirs("models", exist_ok=True)
     os.makedirs("data/uploads", exist_ok=True)
@@ -91,6 +89,7 @@ app.add_middleware(
 # --------------------------------------------------------------------------
 
 app.include_router(upload_raw.router,     prefix="/upload-raw",  tags=["upload-raw"])
+app.include_router(auto_train.router,     prefix="/auto-train",  tags=["auto-train"])
 app.include_router(upload.router)
 app.include_router(train.router)
 app.include_router(models_router.router)
@@ -117,7 +116,6 @@ def health():
     """Kiểm tra trạng thái server và các module."""
     return JSONResponse(content={
         "status"  : "healthy",
-        "database": "sqlite",
         "models"  : os.path.exists("models/global_manifest.xml"),
     })
 

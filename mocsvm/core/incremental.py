@@ -358,7 +358,7 @@ class IncrementalOCSVM:
             base, num = version_name.rsplit("-", 1)
             return f"{base}-{int(num) + 1:02d}"
         except ValueError:
-            return f"{version_name}-new"
+            return f"{version_name}-02"
 
     def __repr__(self) -> str:
         return (

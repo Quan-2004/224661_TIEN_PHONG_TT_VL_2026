@@ -12,11 +12,8 @@ import numpy as np
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
-
-from backend.database import get_db, TrainingLog
-from backend.schemas import TrainRequest, TrainResponse, TrainingLogResponse
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from backend.schemas import TrainRequest, TrainResponse
 from mocsvm.core.multiclass import MultiClassOCSVM
 from mocsvm.utils.data_loader import load_and_validate_csv, split_by_class
 
@@ -43,7 +40,6 @@ def get_mc_manager() -> MultiClassOCSVM:
 @router.post("", response_model=TrainResponse)
 def train_model(
     payload: TrainRequest,
-    db     : Session = Depends(get_db),
 ):
     """
     Khởi động workflow huấn luyện hoặc retrain cho một lớp.
@@ -131,24 +127,7 @@ def train_model(
             )
         log_status = "success"
     except Exception as e:
-        log_status = "failed"
-        error_msg  = str(e)
         raise HTTPException(status_code=500, detail=f"Lỗi khi huấn luyện: {e}")
-    finally:
-        # Ghi log vào DB dù thành công hay thất bại
-        log = TrainingLog(
-            class_name   = payload.class_name,
-            version_name = info.get("version_name", "unknown"),
-            n_samples    = info.get("n_samples", 0),
-            n_features   = info.get("n_features", 0),
-            kernel       = payload.kernel,
-            gamma        = payload.gamma,
-            nu           = payload.nu,
-            status       = log_status,
-            error_msg    = error_msg,
-        )
-        db.add(log)
-        db.commit()
 
     return TrainResponse(
         success      = True,
@@ -198,14 +177,6 @@ def get_classes_from_session(
     }
 
 
-@router.get("/history", response_model=list[TrainingLogResponse])
-def get_training_history(
-    limit: int     = 50,
-    db   : Session = Depends(get_db),
-):
-    """Lấy lịch sử huấn luyện (tất cả các log)."""
-    logs = db.query(TrainingLog).order_by(TrainingLog.created_at.desc()).limit(limit).all()
-    return logs
 
 
 

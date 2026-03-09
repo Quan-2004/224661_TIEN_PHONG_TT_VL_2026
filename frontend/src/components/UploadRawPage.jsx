@@ -16,6 +16,13 @@ export default function UploadRawPage() {
     scale        : true,
   });
 
+  const [trainConfig, setTrainConfig] = useState({
+    kernel: 'rbf',
+    nu: 0.1,
+    gamma: 'scale',
+    version_name: 'v1.0',
+  });
+
   // Auto-detect state
   const [preview, setPreview]         = useState(null);   // { columns, suggested }
   const [previewing, setPreviewing]   = useState(false);
@@ -77,7 +84,7 @@ export default function UploadRawPage() {
   // -------------------------------------------------------
   // Process
   // -------------------------------------------------------
-  const handleProcess = async () => {
+  const handleProcessOnly = async () => {
     if (!file) { setError('Vui lòng chọn file CSV thô!'); return; }
     if (!config.class_column.trim()) { setError('Vui lòng chọn cột nhãn (class_column)!'); return; }
     setLoading(true);
@@ -91,6 +98,38 @@ export default function UploadRawPage() {
         scale        : config.scale,
       });
       setResult(res);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAutoTrain = async () => {
+    if (!file) { setError('Vui lòng chọn file CSV thô!'); return; }
+    if (!config.class_column.trim()) { setError('Vui lòng chọn cột nhãn (class_column)!'); return; }
+    setLoading(true);
+    setResult(null);
+    setError('');
+    try {
+      const res = await uploadAPI.autoTrain(file, {
+        class_column : config.class_column.trim(),
+        id_columns   : JSON.stringify(parseCSVList(config.id_columns)),
+        drop_columns : JSON.stringify(parseCSVList(config.drop_columns)),
+        scale        : config.scale,
+        kernel       : trainConfig.kernel,
+        nu           : parseFloat(trainConfig.nu) || 0.1,
+        gamma        : trainConfig.gamma,
+        version_name : trainConfig.version_name.trim() || 'v1.0',
+      });
+      // The API response returns 'alignment' object wrapping the processing stats 
+      // instead of flat summary keys. Standardize to make UI rendering simpler.
+      const formattedRes = {
+         ...res,
+         summary: res.alignment?.summary || res.summary,
+         pipeline: res.alignment?.pipeline || res.pipeline,
+      };
+      setResult(formattedRes);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -309,19 +348,59 @@ export default function UploadRawPage() {
             </label>
           </div>
 
+          <div className="form-group" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color)' }}>
+            <label className="form-label">🧠 Tham số Huấn luyện Mặc định</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
+              <div>
+                <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Version</label>
+                <input className="form-control" value={trainConfig.version_name} onChange={e => setTrainConfig(p => ({ ...p, version_name: e.target.value }))} />
+              </div>
+              <div>
+                 <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Nu (0, 1]</label>
+                 <input className="form-control" type="number" step="0.01" value={trainConfig.nu} onChange={e => setTrainConfig(p => ({ ...p, nu: e.target.value }))} />
+              </div>
+              <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Kernel</label>
+                  <select className="form-control" value={trainConfig.kernel} onChange={e => setTrainConfig(p => ({ ...p, kernel: e.target.value }))}>
+                    <option value="rbf">RBF</option>
+                    <option value="linear">Linear</option>
+                    <option value="poly">Poly</option>
+                    <option value="sigmoid">Sigmoid</option>
+                  </select>
+              </div>
+              <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Gamma</label>
+                  <select className="form-control" value={trainConfig.gamma} onChange={e => setTrainConfig(p => ({ ...p, gamma: e.target.value }))}>
+                    <option value="scale">scale</option>
+                    <option value="auto">auto</option>
+                  </select>
+              </div>
+            </div>
+          </div>
+
           {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
 
-          <button
-            className="btn btn-primary"
-            style={{ width: '100%' }}
-            onClick={handleProcess}
-            disabled={loading || !file || (!config.class_column && !previewing)}
-          >
-            {loading
-              ? <><span className="spinner" /> Đang xử lý...</>
-              : '🚀 Xử lý & Tách dữ liệu'
-            }
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                className="btn btn-secondary"
+                style={{ flex: 1, padding: '10px 0' }}
+                onClick={handleProcessOnly}
+                disabled={loading || !file || (!config.class_column && !previewing)}
+              >
+                Chỉ Tách dữ liệu
+              </button>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 2 }}
+                onClick={handleAutoTrain}
+                disabled={loading || !file || (!config.class_column && !previewing)}
+              >
+                {loading
+                  ? <><span className="spinner" /> Đang xử lý...</>
+                  : '🚀 Tách & Huấn luyện (Auto)'
+                }
+              </button>
+          </div>
         </div>
 
         {/* ---- Result panel ---- */}
@@ -436,6 +515,26 @@ export default function UploadRawPage() {
                 <div style={{ marginTop: 4 }}><strong>🗑️ Đã bỏ:</strong> {result.pipeline?.columns_dropped?.join(', ') || 'Không có'}</div>
                 <div style={{ marginTop: 4 }}><strong>💾 Session:</strong> <code style={{ color: 'var(--accent-cyan)' }}>{result.session_id}</code></div>
               </div>
+              {/* Training info (if auto-trained) */}
+              {result.training_results && (
+                  <div style={{ marginTop: 16 }}>
+                    <div className="form-label" style={{ marginBottom: 8 }}>✅ Kết quả Huấn luyện</div>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: 4 }}>
+                      {result.training_results.map(r => (
+                          <div key={r.class_name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', marginBottom: 8 }}>
+                              <div>
+                                <strong style={{ color: 'var(--accent-blue)', fontSize: 14 }}>{r.class_name}</strong> 
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{r.n_samples} mẫu · version {r.version_name}</div>
+                              </div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: r.action === 'failed' ? '#f87171' : (r.action === 'retrain' ? '#6ee7b7' : '#c7d2fe'), textAlign: 'right' }}>
+                                 {r.action === 'failed' ? '❌ Thất bại' : (r.action === 'retrain' ? '🔄 Retrained' : '✅ Trained')}
+                                 {r.error && <div style={{ fontSize: 10, fontWeight: 400, color: '#fca5a5', maxWidth: 120, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.error}>{r.error}</div>}
+                              </div>
+                          </div>
+                      ))}
+                    </div>
+                  </div>
+              )}
             </div>
           )}
         </div>

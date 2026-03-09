@@ -91,21 +91,3 @@ class ModelDetailResponse(BaseModel):
     showing_rows      : int
 
 
-# --------------------------------------------------------------------------
-# Training Log Schemas
-# --------------------------------------------------------------------------
-
-class TrainingLogResponse(BaseModel):
-    id          : int
-    class_name  : str
-    version_name: str
-    n_samples   : int
-    n_features  : int
-    kernel      : str
-    gamma       : str
-    nu          : float
-    status      : str
-    error_msg   : Optional[str] = None
-    created_at  : datetime
-
-    model_config = {"from_attributes": True}

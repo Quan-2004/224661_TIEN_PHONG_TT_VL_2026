@@ -87,6 +87,27 @@ export const uploadAPI = {
 
     return apiFetch('/upload-raw', { method: 'POST', body: form });
   },
+  /**
+   * Phase 0 + 1 – Upload 1 file CSV thô → tiền xử lý tự động + huấn luyện tất cả các class
+   * @param {File}   file   – File CSV thô
+   * @param {Object} config – Lựa chọn xử lý và SVM params
+   */
+  autoTrain: (file, config = {}) => {
+    const form = new FormData();
+    form.append('file',         file);
+    form.append('class_column', config.class_column   || 'state');
+    form.append('id_columns',   config.id_columns     || '[]');
+    form.append('drop_columns', config.drop_columns   || '[]');
+    form.append('scale',        config.scale !== false ? 'true' : 'false');
+    
+    // Training params
+    form.append('kernel',       config.kernel       || 'rbf');
+    form.append('nu',           config.nu           || 0.1);
+    form.append('gamma',        config.gamma        || 'scale');
+    form.append('version_name', config.version_name || 'v1.0');
+
+    return apiFetch('/auto-train', { method: 'POST', body: form });
+  },
 };
 
 // ---------- Training ----------
@@ -101,9 +122,6 @@ export const trainAPI = {
       method: 'POST',
       body: JSON.stringify(params),
     }),
-
-  /** Lịch sử huấn luyện */
-  history: (limit = 20) => apiFetch(`/train/history?limit=${limit}`),
 
   /**
    * Lấy danh sách lớp từ session đã upload CSV thô (Phase 0)

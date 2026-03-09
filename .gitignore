@@ -118,3 +118,14 @@ docker-compose.yml
 
 # Windows
 Thumbs.db
+
+# Project Specific
+mocsvm.db
+data/processed/*
+!data/processed/.gitkeep
+data/uploads/*
+!data/uploads/.gitkeep
+models/*
+!models/.gitkeep
+node_modules/
+.env

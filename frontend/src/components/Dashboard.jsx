@@ -7,7 +7,6 @@ import ModelDetailModal from './ModelDetailModal';
  */
 export default function Dashboard() {
   const [modelsData, setModelsData] = useState(null);
-  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedModel, setSelectedModel] = useState(null);
@@ -16,20 +15,10 @@ export default function Dashboard() {
     setLoading(true);
     setError('');
     try {
-      const [models, hist] = await Promise.all([
-        modelsAPI.list(),
-        trainAPI.history(10),
-      ]);
+      const models = await modelsAPI.list();
       setModelsData(models);
-      setHistory(hist);
     } catch (err) {
-      // Lấy models mà không cần auth (public endpoint)
-      try {
-        const models = await modelsAPI.list();
-        setModelsData(models);
-      } catch (e) {
-        setError('Không thể tải dữ liệu. Kiểm tra kết nối tới Backend.');
-      }
+      setError('Không thể tải dữ liệu. Kiểm tra kết nối tới Backend.');
     } finally {
       setLoading(false);
     }
@@ -77,13 +66,6 @@ export default function Dashboard() {
               {loading ? '…' : (modelsData?.models?.reduce((a, m) => a + parseInt(m.metadata?.n_samples || 0), 0) ?? 0)}
             </div>
             <div className="stat-label">Tổng mẫu huấn luyện</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon green">✅</div>
-          <div className="stat-info">
-            <div className="stat-value">{loading ? '…' : (history.filter(h => h.status === 'success').length)}</div>
-            <div className="stat-label">Lần train thành công</div>
           </div>
         </div>
         <div className="stat-card">
@@ -159,43 +141,6 @@ export default function Dashboard() {
           </div>
         )}
       </div>
-
-      {/* Training History */}
-      {history.length > 0 && (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">📝 Lịch sử huấn luyện gần đây</div>
-          </div>
-          <div className="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th>Lớp</th>
-                  <th>Phiên bản</th>
-                  <th>Trạng thái</th>
-                  <th>Mẫu</th>
-                  <th>Thời gian</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((log) => (
-                  <tr key={log.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{log.class_name}</td>
-                    <td><span className="badge badge-blue">{log.version_name}</span></td>
-                    <td>
-                      <span className={`badge ${log.status === 'success' ? 'badge-green' : 'badge-orange'}`}>
-                        {log.status === 'success' ? '✓ Thành công' : '✗ Thất bại'}
-                      </span>
-                    </td>
-                    <td>{log.n_samples?.toLocaleString()}</td>
-                    <td style={{ fontSize: 12 }}>{formatDate(log.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Model Detail Modal */}
       {selectedModel && (
