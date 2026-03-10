@@ -129,3 +129,11 @@ models/*
 !models/.gitkeep
 node_modules/
 .env
+.pytest_cache/
+
+# Large data files & test outputs
+ks-projects-*.csv
+test_*.csv
+*_output*.txt
+test_out*.txt
+demo_output.txt
