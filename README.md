@@ -1,131 +1,323 @@
-# mOC-iSVM – Modified One-Class Incremental SVM
+<div align="center">
 
-> Hệ thống MLOps hoàn chỉnh cho thuật toán One-Class SVM đa lớp với học tăng cường.
+# mOC-iSVM
 
-## Kiến trúc hệ thống
+**Modified One-Class Incremental Support Vector Machine**
+
+A complete MLOps system for multi-class anomaly detection using incremental One-Class SVM with a modern web interface.
+
+[![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.5-F7931E?logo=scikit-learn&logoColor=white)](https://scikit-learn.org)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+
+</div>
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Running the App](#running-the-app)
+- [API Reference](#api-reference)
+- [How It Works](#how-it-works)
+- [Tech Stack](#tech-stack)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## Overview
+
+**mOC-iSVM** is a research-oriented MLOps platform that implements a **multi-class incremental One-Class SVM** (One-vs-Rest strategy). Instead of retraining from scratch, the system learns incrementally by retaining only Support Vectors between training sessions, making it efficient for continuous learning scenarios.
+
+The system provides a full-stack web interface for:
+
+- Uploading raw CSV datasets and auto-training class models
+- Visualizing model details and support vectors
+- Running inference on new data with detailed confidence scores
+- Managing model versions via an XML-based model registry
+
+---
+
+## Features
+
+- 🧠 **Incremental Learning** — Only Support Vectors are stored between sessions, enabling efficient retraining
+- 🔁 **Auto Train Pipeline** — Upload raw CSV → preprocess → train/retrain all classes automatically
+- 📊 **PCA Visualization** — 2D scatter plot of Support Vectors per class
+- 🗂️ **Model Registry** — XML manifest tracks all model versions with metadata
+- 🔐 **JWT Authentication** — Secure login/register with role-based access (admin/user)
+- 📁 **CSV Testing** — Upload new CSV files and batch-classify all rows
+- 📈 **Training History** — Full audit log of all training sessions
+
+---
+
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   FRONTEND (React + Vite)                │
-│  Dashboard │ Training Page │ Scatter Visualization       │
-└──────────────────────┬──────────────────────────────────┘
-                       │ HTTP/REST (JWT)
-┌──────────────────────▼──────────────────────────────────┐
-│                 BACKEND (FastAPI + Python 3.10)          │
-│  /auth  │ /upload │ /train │ /models │ /predict         │
-│                   SQLite Database                        │
-└─────────┬───────────────────────┬───────────────────────┘
-          │                       │
-   ┌──────▼──────┐        ┌───────▼──────┐
-   │  mocsvm/    │        │   models/    │
-   │  (Core ML   │        │  *.pkl files │
-   │   Library)  │        │  manifest.xml│
-   └─────────────┘        └──────────────┘
+┌──────────────────────────────────────────────┐
+│            FRONTEND (React + Vite)            │
+│  Dashboard │ Train │ Upload │ Test │ Inference │
+└─────────────────────┬────────────────────────┘
+                      │ HTTP REST API (JWT)
+┌─────────────────────▼────────────────────────┐
+│           BACKEND (FastAPI + Python)          │
+│  /auth  /upload  /train  /models  /predict   │
+│            SQLite (users + logs)              │
+└──────────┬───────────────────┬───────────────┘
+           │                   │
+    ┌──────▼──────┐    ┌───────▼──────┐
+    │   mocsvm/   │    │   models/    │
+    │  Core ML    │    │  *.pkl files │
+    │  Library    │    │  manifest.xml│
+    └─────────────┘    └──────────────┘
 ```
 
-## Cấu trúc thư mục
+---
+
+## Project Structure
 
 ```
-mOC-isvm2/
-├── mocsvm/                      # Core ML Library
+mOC-iSVM/
+├── mocsvm/                      # Core ML Library (Python package)
 │   ├── core/
-│   │   ├── incremental.py       # IncrementalOCSVM
-│   │   ├── multiclass.py        # MultiClassOCSVM (One-vs-Rest)
-│   │   └── manifest_manager.py  # XML Registry
+│   │   ├── incremental.py       # IncrementalOCSVM – single-class model
+│   │   ├── multiclass.py        # MultiClassOCSVM – One-vs-Rest wrapper
+│   │   └── manifest_manager.py  # XML model registry manager
 │   └── utils/
-│       └── data_loader.py       # CSV validation
-├── backend/                     # FastAPI Backend
-│   ├── main.py                  # Entry point
-│   ├── database.py              # SQLite + SQLAlchemy
-│   ├── auth.py                  # JWT + bcrypt
-│   ├── schemas.py               # Pydantic schemas
-│   ├── routers/                 # API endpoints
-│   ├── .env                     # Environment config
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/                    # React Frontend
+│       └── data_loader.py       # CSV validation & preprocessing
+│
+├── backend/                     # FastAPI Application
+│   ├── main.py                  # App entry point & middleware
+│   ├── schemas.py               # Pydantic request/response models
+│   ├── requirements.txt         # Python dependencies
+│   ├── .env                     # Environment variables (not committed)
+│   └── routers/
+│       ├── upload.py            # /upload – processed CSV upload
+│       ├── upload_raw.py        # /upload-raw – raw CSV upload
+│       ├── auto_train.py        # /auto-train – full pipeline
+│       ├── train.py             # /train – manual training
+│       ├── predict.py           # /predict – inference
+│       ├── models_router.py     # /models – model listing & details
+│       └── test_csv.py          # /test-csv – batch CSV classification
+│
+├── frontend/                    # React Web Application
 │   ├── src/
-│   │   ├── components/          # Dashboard, TrainingPage, ScatterPlot
-│   │   ├── services/api.js      # API layer
-│   │   └── index.css            # Dark mode styles
-│   ├── nginx.conf
-│   └── Dockerfile
-├── models/                      # Model files (.pkl) + XML
-│   └── global_manifest.xml      # Model registry
-├── data/uploads/                # Uploaded CSV files
-└── docker-compose.yml
+│   │   ├── components/
+│   │   │   ├── Dashboard.jsx       # Model overview & stats
+│   │   │   ├── TrainingPage.jsx    # Manual train/retrain UI
+│   │   │   ├── UploadRawPage.jsx   # Auto-train pipeline UI
+│   │   │   ├── TestCsvPage.jsx     # CSV batch testing UI
+│   │   │   └── ModelDetailModal.jsx # Model details & scatter plot
+│   │   ├── services/api.js         # Centralized API client
+│   │   └── index.css               # Global dark-mode styles
+│   ├── package.json
+│   └── vite.config.js
+│
+├── models/                      # Trained model files
+│   ├── *.pkl                    # Serialized model per class
+│   └── manifest.xml             # Model version registry
+│
+├── data/
+│   ├── uploads/                 # Uploaded CSV files
+│   └── processed/               # Preprocessed CSV files
+│
+├── setup.py                     # Package setup for mocsvm
+├── DEPLOYMENT.md                # Production deployment guide
+└── README.md
 ```
 
-## Cách XML điều phối hệ thống
+---
 
-File `models/global_manifest.xml` là **Registry trung tâm**. Mỗi khi một model được train/retrain:
+## Getting Started
+
+### Prerequisites
+
+| Tool    | Version |
+| ------- | ------- |
+| Python  | 3.10+   |
+| Node.js | 18+     |
+| npm     | 9+      |
+
+### Installation
+
+**1. Clone the repository**
+
+```bash
+git clone https://github.com/Quan-2004/mOC-iSVM.git
+cd mOC-iSVM
+```
+
+**2. Set up the Python environment**
+
+```bash
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+
+# Linux / macOS
+source .venv/bin/activate
+
+pip install -r backend/requirements.txt
+pip install -e .   # install the mocsvm package in editable mode
+```
+
+**3. Configure environment variables**
+
+```bash
+# backend/.env (already provided, edit as needed)
+SECRET_KEY=your-secret-key
+DATABASE_URL=sqlite:///./mocsvm.db
+```
+
+**4. Set up the frontend**
+
+```bash
+cd frontend
+npm install
+```
+
+### Running the App
+
+Run both services in separate terminals:
+
+```bash
+# Terminal 1 – Backend
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+```bash
+# Terminal 2 – Frontend
+cd frontend
+npm run dev
+```
+
+| Service            | URL                         |
+| ------------------ | --------------------------- |
+| Web App            | http://localhost:5173       |
+| API Docs (Swagger) | http://localhost:8000/docs  |
+| API Docs (ReDoc)   | http://localhost:8000/redoc |
+
+---
+
+## API Reference
+
+### Authentication
+
+| Method | Endpoint         | Auth | Description               |
+| ------ | ---------------- | ---- | ------------------------- |
+| `POST` | `/auth/register` | ❌   | Register a new user       |
+| `POST` | `/auth/login`    | ❌   | Login → returns JWT token |
+| `GET`  | `/auth/me`       | ✅   | Get current user info     |
+
+### Data & Training
+
+| Method | Endpoint         | Auth | Description                                |
+| ------ | ---------------- | ---- | ------------------------------------------ |
+| `POST` | `/upload`        | ✅   | Upload preprocessed CSV per class          |
+| `POST` | `/upload-raw`    | ✅   | Upload raw CSV, auto-split by class        |
+| `POST` | `/auto-train`    | ✅   | Full pipeline: upload + preprocess + train |
+| `POST` | `/train`         | ✅   | Manually train or retrain a class model    |
+| `GET`  | `/train/history` | ✅   | List all past training sessions            |
+
+### Models & Inference
+
+| Method | Endpoint               | Auth | Description                         |
+| ------ | ---------------------- | ---- | ----------------------------------- |
+| `GET`  | `/models`              | ❌   | List all registered models          |
+| `GET`  | `/models/{class_name}` | ❌   | Get model details + support vectors |
+| `POST` | `/predict`             | ❌   | Classify a single data vector       |
+| `POST` | `/predict/reload`      | ❌   | Reload models from disk             |
+| `POST` | `/test-csv`            | ❌   | Batch classify all rows in a CSV    |
+
+> Full interactive documentation available at `http://localhost:8000/docs`
+
+---
+
+## How It Works
+
+### Incremental Learning
+
+Each class has its own `IncrementalOCSVM` model. When retraining:
+
+1. The existing model's **Support Vectors** are loaded from the `.pkl` file
+2. New training data is **merged** with the stored Support Vectors
+3. A new OC-SVM is fitted on the combined data
+4. Only the resulting **Support Vectors** are saved back — keeping memory footprint minimal
+
+### Model Registry (XML)
+
+`models/manifest.xml` is the central registry. Every train/retrain operation:
+
+- Creates a new versioned `.pkl` file (e.g., `classname-02.pkl`)
+- Updates the manifest with metadata (kernel, nu, gamma, n_samples, trained_at)
+- Allows the backend to always load the **latest version** of each model
 
 ```xml
-<?xml version="1.0" encoding="utf-8"?>
-<manifest updated="2025-01-01T12:00:00">
-    <model class_name="successful" version="successful-02">
-        <pkl_path>models/successful-02.pkl</pkl_path>
+<manifest updated="2026-03-10T12:00:00">
+    <model class_name="Successful" version="Successful-02">
+        <pkl_path>models/Successful-02.pkl</pkl_path>
         <metadata>
             <kernel>rbf</kernel>
             <gamma>scale</gamma>
             <nu>0.1</nu>
             <n_samples>150</n_samples>
-            <trained_at>2025-01-01T10:00:00</trained_at>
+            <trained_at>2026-03-10T10:00:00</trained_at>
         </metadata>
     </model>
 </manifest>
 ```
 
-- **Frontend** đọc `/models` API → Backend đọc XML → trả JSON cho Dashboard.
-- **Retrain** tự động tăng phiên bản: `successful-01` → `successful-02`.
+### One-vs-Rest Inference
 
-## Cách SQLite quản lý dữ liệu người dùng
+When predicting a new sample, **every class model** is evaluated. The system:
 
-Hai bảng chính:
+1. Computes the decision score from each OC-SVM
+2. Returns the class with the **highest positive score** as the prediction
+3. Reports "unknown" if all scores are negative (sample belongs to no known class)
 
-- **`users`**: username, hashed_password (bcrypt), role (admin/user), is_active
-- **`training_logs`**: lịch sử mỗi lần train/retrain, liên kết với user_id
+---
 
-## Cài đặt nhanh (Development)
+## Tech Stack
 
-```bash
-# 1. Tạo môi trường ảo Python 3.10
-python -m venv venv
-venv\Scripts\activate      # Windows
-# source venv/bin/activate  # Linux/Mac
+| Layer         | Technology                          |
+| ------------- | ----------------------------------- |
+| ML Core       | scikit-learn, numpy, pandas         |
+| Backend       | FastAPI, SQLAlchemy, SQLite         |
+| Auth          | JWT (python-jose), bcrypt (passlib) |
+| Frontend      | React 18, Vite, Vanilla CSS         |
+| Serialization | joblib (`.pkl`), XML (manifest)     |
 
-# 2. Cài đặt backend
-pip install -r backend/requirements.txt
+---
 
-# 3. Khởi động backend
-uvicorn backend.main:app --reload --port 8000
-# → Swagger UI: http://localhost:8000/docs
+## Contributing
 
-# 4. Cài đặt & khởi động frontend
-cd frontend
-npm install
-npm run dev
-# → App: http://localhost:5173
-```
+Contributions are welcome! Please follow these steps:
 
-## API Endpoints
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature-name`
+3. Commit your changes: `git commit -m 'feat: add some feature'`
+4. Push to the branch: `git push origin feature/your-feature-name`
+5. Open a Pull Request
 
-| Method | Endpoint          | Auth | Mô tả            |
-| ------ | ----------------- | ---- | ---------------- |
-| POST   | `/auth/register`  | ❌   | Đăng ký          |
-| POST   | `/auth/login`     | ❌   | Đăng nhập → JWT  |
-| GET    | `/auth/me`        | ✅   | Thông tin user   |
-| POST   | `/upload`         | ✅   | Upload 3 CSV     |
-| POST   | `/train`          | ✅   | Train/Retrain    |
-| GET    | `/train/history`  | ✅   | Lịch sử train    |
-| GET    | `/models`         | ❌   | Danh sách models |
-| POST   | `/predict`        | ❌   | Dự đoán          |
-| POST   | `/predict/reload` | ❌   | Reload models    |
+Please follow [Conventional Commits](https://www.conventionalcommits.org/) for commit messages.
 
-## Docker
+---
 
-```bash
-docker-compose up --build
-# Backend: http://localhost:8000/docs
-# Frontend: http://localhost:3000
-```
+## License
+
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+Made with ❤️ for research on incremental One-Class SVM
+</div>
