@@ -2,7 +2,8 @@ import { useState, useCallback } from 'react';
 import { uploadAPI } from '../services/api';
 
 /**
- * UploadRawPage – Phase 0
+ * UploadRawPage – Phase 0 → Pha 1/2
+ * Upload CSV thô → GlobalScaler fit → train/retrain với SV Pruning
  * Chế độ 1 (Thủ công): nhập tên cột bằng tay
  * Chế độ 2 (Tự động):  upload file → backend trả danh sách cột → chọn bằng click
  */
@@ -13,14 +14,16 @@ export default function UploadRawPage() {
     class_column : '',
     id_columns   : '',
     drop_columns : '',
-    scale        : true,
   });
 
   const [trainConfig, setTrainConfig] = useState({
     kernel: 'rbf',
-    nu: 0.1,
+    nu: 0.05,
     gamma: 'scale',
     version_name: 'v1.0',
+    age_threshold: 5,
+    error_threshold: 0.5,
+    retrain: true,
   });
 
   // Auto-detect state
@@ -113,20 +116,20 @@ export default function UploadRawPage() {
     setError('');
     try {
       const res = await uploadAPI.autoTrain(file, {
-        class_column : config.class_column.trim(),
-        id_columns   : JSON.stringify(parseCSVList(config.id_columns)),
-        drop_columns : JSON.stringify(parseCSVList(config.drop_columns)),
-        scale        : config.scale,
-        kernel       : trainConfig.kernel,
-        nu           : parseFloat(trainConfig.nu) || 0.1,
-        gamma        : trainConfig.gamma,
-        version_name : trainConfig.version_name.trim() || 'v1.0',
+        class_column    : config.class_column.trim(),
+        id_columns      : JSON.stringify(parseCSVList(config.id_columns)),
+        drop_columns    : JSON.stringify(parseCSVList(config.drop_columns)),
+        kernel          : trainConfig.kernel,
+        nu              : parseFloat(trainConfig.nu) || 0.05,
+        gamma           : trainConfig.gamma,
+        version_name    : trainConfig.version_name.trim() || 'v1.0',
+        age_threshold   : parseInt(trainConfig.age_threshold) || 5,
+        error_threshold : parseFloat(trainConfig.error_threshold) || 0.5,
+        retrain         : trainConfig.retrain,
       });
-      // The API response returns 'alignment' object wrapping the processing stats 
-      // instead of flat summary keys. Standardize to make UI rendering simpler.
       const formattedRes = {
          ...res,
-         summary: res.alignment?.summary || res.summary,
+         summary : res.alignment || res.summary,
          pipeline: res.alignment?.pipeline || res.pipeline,
       };
       setResult(formattedRes);
@@ -153,10 +156,10 @@ export default function UploadRawPage() {
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">📥 Upload CSV Thô</h1>
+        <h1 className="page-title">🎓 Train CSV (Phase 0 → 2)</h1>
         <p className="page-subtitle">
-          Phase 0 – Tiền xử lý tự động: làm sạch NaN, mã hoá nhãn, chuẩn hoá số,
-          rồi tách thành 3 file đồng bộ <code>samples.csv / features.csv / classes.csv</code>
+          Pha 0: Làm sạch NaN, mã hoá nhãn → fit <strong>Global Scaler</strong> toàn cục →
+          Pha 1/2: Huấn luyện OC-SVM per-class với <strong>SV Pruning</strong> (Age + Error)
         </p>
       </div>
 
@@ -333,23 +336,19 @@ export default function UploadRawPage() {
             </>
           )}
 
-          {/* scale – hiển thị cả hai chế độ */}
-          <div className="form-group">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={config.scale}
-                onChange={e => setConfig(p => ({ ...p, scale: e.target.checked }))}
-                style={{ width: 16, height: 16 }}
-              />
-              <span className="form-label" style={{ marginBottom: 0 }}>
-                📐 Chuẩn hóa số (StandardScaler)
-              </span>
-            </label>
+          {/* Global Scaler info – không cần toggle, luôn được dùng */}
+          <div style={{
+            padding: '10px 14px',
+            background: 'rgba(59,130,246,0.08)',
+            border: '1px solid rgba(59,130,246,0.3)',
+            borderRadius: 8, fontSize: 12, color: 'var(--text-muted)', marginBottom: 12,
+          }}>
+            🌐 <strong style={{ color: '#93c5fd' }}>Global Scaler</strong> sẽ tự động fit trên toàn bộ dữ liệu train
+            (μ, σ tính trên tất cả lớp), sau đó đóng băng và dùng cho mọi inference.
           </div>
 
           <div className="form-group" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color)' }}>
-            <label className="form-label">🧠 Tham số Huấn luyện Mặc định</label>
+            <label className="form-label">🧠 Tham số Huấn luyện</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
               <div>
                 <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Version</label>
@@ -364,8 +363,6 @@ export default function UploadRawPage() {
                   <select className="form-control" value={trainConfig.kernel} onChange={e => setTrainConfig(p => ({ ...p, kernel: e.target.value }))}>
                     <option value="rbf">RBF</option>
                     <option value="linear">Linear</option>
-                    <option value="poly">Poly</option>
-                    <option value="sigmoid">Sigmoid</option>
                   </select>
               </div>
               <div>
@@ -375,6 +372,28 @@ export default function UploadRawPage() {
                     <option value="auto">auto</option>
                   </select>
               </div>
+            </div>
+            {/* SV Pruning params */}
+            <div style={{ marginTop: 12 }}>
+              <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>✂️ SV Pruning</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Age Threshold (chu kỳ)</label>
+                  <input className="form-control" type="number" min="1" step="1" value={trainConfig.age_threshold}
+                    onChange={e => setTrainConfig(p => ({ ...p, age_threshold: e.target.value }))} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Error Threshold (%)</label>
+                  <input className="form-control" type="number" min="0" max="1" step="0.05" value={trainConfig.error_threshold}
+                    onChange={e => setTrainConfig(p => ({ ...p, error_threshold: e.target.value }))} />
+                </div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, cursor: 'pointer', fontSize: 13 }}>
+                <input type="checkbox" checked={trainConfig.retrain}
+                  onChange={e => setTrainConfig(p => ({ ...p, retrain: e.target.checked }))}
+                  style={{ width: 15, height: 15 }} />
+                <span style={{ color: 'var(--text-secondary)' }}>Retrain nếu lớp đã tồn tại (dùng SV Pruning)</span>
+              </label>
             </div>
           </div>
 
@@ -424,7 +443,7 @@ export default function UploadRawPage() {
               </div>
               {loading && (
                 <div style={{ fontSize: 12, marginTop: 6 }}>
-                  Bước: Làm sạch NaN → Label Encode → StandardScaler → Kiểm tra alignment
+                  Bước: Làm sạch NaN → Label Encode → <strong>Fit Global Scaler</strong> → Train OC-SVM per-class
                 </div>
               )}
             </div>

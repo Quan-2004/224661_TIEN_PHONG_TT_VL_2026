@@ -12,7 +12,7 @@ _A pure algorithmic research project implementing multi-class anomaly detection 
 [![scikit-learn](https://img.shields.io/badge/scikit--learn-1.5+-F7931E?logo=scikit-learn&logoColor=white)](https://scikit-learn.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-success.svg)](https://opensource.org/licenses/MIT)
 
-[Overview](#overview) • [Core Algorithm](#core-algorithm) • [Installation](#installation) • [Data Structures](#data-structures)
+[Overview](#overview) • [Core Architecture](#core-architecture) • [Getting Started](#getting-started) • [Contributing](#contributing)
 
 </div>
 
@@ -26,34 +26,38 @@ Traditional Support Vector Machine (SVM) algorithms demand a full dataset retrai
 
 The architecture comprises a foundational ML package (`mocsvm`), exposed interactively via a lightweight FastAPI backend and visualized seamlessly using React.
 
-## 🧠 Core Algorithm: How It Works
+## 🧠 Core Architecture: 4 Phases of mOC-iSVM
 
-### Incremental Target Learning
+Based on our `ARCHITECTURE.md`, the system is built around 4 highly optimized algorithmic phases:
 
-At its core, `mOC-iSVM` instantiates a distinct `IncrementalOCSVM` object assigned to each detected classification class. Upon initiating a model retraining sequence:
+### Phase 0: Preprocessing & Global Scaler
+Before any SVM model is trained, the system establishes a **Global Scaler** utilizing a unified standardized coordinate system. 
+- **The Global Scaler** prevents the isolated coordinate displacement that causes extreme boundary overlap when individual classes are normalized separately.
+- **Categorical Encoder Manager** persists mapping dictionaries to guarantee exact string-to-integer translation between Train and Test CSV phases.
 
-1. **Extraction**: Preceding Support Vectors (the bounding threshold data points defining the hypersphere boundary) are efficiently loaded from serialized `.pkl` arrays.
-2. **Aggregation**: Newly ingested data bounds are structurally appended strictly to these legacy Support Vectors.
-3. **Execution**: A succeeding scikit-learn `OneClassSVM` kernel executes optimization fitting exclusively over this minimized footprint dataset.
-4. **Distillation**: The output isolates new Support Vectors which overwrite the prior records.
+### Phase 1: Train Workflow & SV Extraction
+1. The global dataset is split into isolated class segments ($X_A, X_B, X_C$).
+2. A unique **One-Class SVM** model is trained independently for each class.
+3. The system executes a rigorous GridSearch across $(\gamma, \nu)$ parameters (specifically tuned for tight boundaries using large gamma and nu bounds) using other classes as negative reinforcement.
+4. **Support Vectors (SVs)** are extracted. The raw data is deleted to free RAM, keeping only mathematically significant SV boundary descriptors as "Compressed Memory".
 
-By only caching bounding Support Vectors instead of full datasets, memory utilization and optimization compute times undergo exponential reduction over extensive lifecycle loops.
+### Phase 2: Retrain Workflow & SV Pruning
+When incrementally retraining with new data, the system fuses incoming data with historical SV memory. To prevent "Concept Drift" and bloated memory boundaries:
+- **Age Pruning**: Erases historical SVs that exceed an alpha-cycle lifespan threshold.
+- **Error Pruning**: Conducts an accuracy benchmark against incoming data, completely flushing legacy SVs if performance drops below the precision threshold.
 
-### One-vs-Rest (OvR) Inference Logic
-
-Prediction evaluates unstructured data across all distinct incremental class models concurrently.
-
-1. Computing individual Decision Scores per OC-SVM.
-2. The maximal positive score dictates the predicted label.
-3. System outputs an "Unknown" classification if all margins yield negatively, accurately flagging anomaly occurrences.
+### Phase 3: Test Workflow & Euclidean Tie-Break
+During prediction, a completely unknown sample ($x_{test}$) is broadcast via OVR to all established models. 
+- If multiple models claim the sample (returning positive margin > 0), the system enters into an overlap resolution.
+- **Euclidean Nearest-SV Tie-break**: The system suspends complex Kernel evaluations and measures the absolute geometric Euclidean Distance to the closest internal Support Vector of the contending classes. The class possessing the nearest "outpost SV" decisively wins the Tie-break.
 
 ## ✨ Technical Features
 
 - **Algorithmic Primacy**: Focused completely on the ML matrix math and modeling; stripped of bloated databases or extraneous authentication logic.
 - **🔄 Auto Train Pipeline**: Upload raw CSV matrices → Auto-preprocess → System trains/retrains all detected bounds dynamically.
 - **📊 Dimensionality Reduction**: Real-time Principal Component Analysis (PCA) maps multidimensional Support Vectors into 2D scatter visualizations.
-- **🗂️ Stateless Model Registry**: A declarative XML-based paradigm records tuning hyperparameters (`gamma`, `nu`, `kernel`) linking to distinct sequential `.pkl` versions.
-- **🧪 Batch Heuristics**: Extensive pipeline logic designed to ingest full unclassified CSV datasets to simulate large-scale testing (OvR).
+- **🗂️ Stateless Model Registry**: A declarative XML-based paradigm (`global_manifest.xml`) records tuning hyperparameters linking to distinct sequential `.pkl` versions.
+- **🧪 Complete CSV Inference**: Entirely anonymous CSV inferencing utilizing automated saved `LabelEncoders` and exact-match automated feature filtering.
 
 ## 🚀 Getting Started
 
@@ -82,8 +86,8 @@ Prediction evaluates unstructured data across all distinct incremental class mod
    source .venv/bin/activate
 
    pip install -r backend/requirements.txt
-
-   # Emplace core algorithmic library globally
+   
+   # Setup global python module
    pip install -e .
    ```
 
@@ -105,42 +109,6 @@ Prediction evaluates unstructured data across all distinct incremental class mod
 
 - **Web Analytics UI:** [http://localhost:5173](http://localhost:5173)
 - **Algorithm API Docs (Swagger):** [http://localhost:8000/docs](http://localhost:8000/docs)
-
----
-
-## 📂 Algorithmic Data Structures
-
-Ensure inputted CSV pipelines match structural heuristics for matrix parsing.
-
-### 1. `samples.csv` (Dense Feature Matrix)
-
-A strict numerical matrix lacking header delineations.
-
-```csv
-1.2,0.5,3.1,2.0
-1.8,0.3,2.9,1.7
-2.1,0.2,3.3,1.9
-```
-
-### 2. `features.csv` (Feature Dimensions)
-
-Explicit 1D vector mapping to sequence columns.
-
-```csv
-feature_1,feature_2,feature_3,feature_4
-```
-
-### 3. `classes.csv` (Target Vector Object)
-
-1D string array denoting sequential targets corresponding directly to the `samples.csv` bounds. No headers.
-
-```csv
-successful
-successful
-failed
-```
-
-_Note: The platform provides an `Upload CSV Thô` (Raw CSV) functionality that inherently splits and parses unified datasets based on the final column._
 
 ---
 

@@ -24,6 +24,8 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
+from mocsvm.utils.encoder_manager import CategoricalEncoderManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -99,9 +101,10 @@ class DataProcessor:
         class_column: str,
         id_columns: Optional[List[str]] = None,
         drop_columns: Optional[List[str]] = None,
-        scale: bool = True,
+        scale: bool = False,
         fill_strategy: str = "mean",
         encoding: str = "utf-8",
+        model_dir: str = "models",
     ):
         self.class_column  = class_column.strip()
         self.id_columns    = [c.strip() for c in (id_columns or [])]
@@ -109,6 +112,7 @@ class DataProcessor:
         self.scale         = scale
         self.fill_strategy = fill_strategy
         self.encoding      = encoding
+        self.model_dir     = model_dir
 
         self._label_encoders: Dict[str, LabelEncoder] = {}
         self._scaler: Optional[StandardScaler] = None
@@ -241,6 +245,11 @@ class DataProcessor:
         logger.info(f"[DataProcessor] Đã lưu: {features_path}")
         logger.info(f"[DataProcessor] Đã lưu: {classes_path}")
 
+        # 10.5 Lưu LabelEncoders (nếu có) để phục vụ quá trình Predict
+        if self._label_encoders:
+            enc_mgr = CategoricalEncoderManager(model_dir=str(self.model_dir))
+            enc_mgr.save_encoders(self._label_encoders)
+
         # 11. Thống kê class -----------------------------------------------
         class_counts = class_series.value_counts().to_dict()
         unique_cls   = sorted(class_counts.keys())
@@ -260,6 +269,11 @@ class DataProcessor:
                 "classes" : classes_path,
             },
         )
+
+    @property
+    def scaler(self) -> "Optional[StandardScaler]":
+        """Trả về StandardScaler đã fit, hoặc None nếu không scale."""
+        return self._scaler
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -300,7 +314,7 @@ def process_raw_csv(
     class_column    : str,
     id_columns      : Optional[List[str]] = None,
     drop_columns    : Optional[List[str]] = None,
-    scale           : bool = True,
+    scale           : bool = False,
     fill_strategy   : str  = "mean",
 ) -> ProcessingReport:
     """

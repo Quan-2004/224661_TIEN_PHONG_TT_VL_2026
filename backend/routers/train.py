@@ -2,9 +2,14 @@
 Router: Training
 =================
 Endpoints:
-  POST /train         – Kích hoạt workflow huấn luyện / retrain
-  GET  /train/history – Lấy lịch sử huấn luyện
+  POST /train         – Kích hoạt workflow huấn luyện / retrain cho 1 lớp
   GET  /train/classes – Lấy danh sách lớp từ session upload CSV thô
+
+Quy trình:
+  1. Đọc 3 file CSV (samples/features/classes) từ đường dẫn đã upload.
+  2. Load GlobalScaler đã đóng băng (TUYỆT ĐỐI KHÔNG fit lại).
+  3. Transform X qua GlobalScaler.
+  4. Lọc lấy mẫu thuộc class_name, huấn luyện / retrain model OC-SVM.
 """
 
 import os
@@ -16,14 +21,14 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, sta
 from backend.schemas import TrainRequest, TrainResponse
 from mocsvm.core.multiclass import MultiClassOCSVM
 from mocsvm.utils.data_loader import load_and_validate_csv, split_by_class
+from mocsvm.utils.global_scaler import GlobalScalerManager
 
 router = APIRouter(prefix="/train", tags=["Training"])
 
-# Đường dẫn model và manifest toàn cục
 MODEL_DIR     = os.getenv("MODEL_DIR",     "models")
 MANIFEST_PATH = os.getenv("MANIFEST_PATH", "models/global_manifest.xml")
 
-# Singleton manager – được khởi tạo một lần khi import
+# Singleton manager – khởi tạo một lần khi import
 _mc_manager: MultiClassOCSVM | None = None
 
 
@@ -32,100 +37,112 @@ def get_mc_manager() -> MultiClassOCSVM:
     global _mc_manager
     if _mc_manager is None:
         _mc_manager = MultiClassOCSVM(model_dir=MODEL_DIR, manifest_path=MANIFEST_PATH)
-        # Load tất cả model đã có trong manifest
         _mc_manager.load_all_from_manifest()
     return _mc_manager
 
 
+def _load_global_scaler() -> GlobalScalerManager:
+    """Load GlobalScaler đã đóng băng từ disk."""
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    gsm = GlobalScalerManager(model_dir=os.path.join(base_dir, MODEL_DIR))
+    loaded = gsm.load()
+    if not loaded:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "GlobalScaler chưa được khởi tạo. "
+                "Hãy chạy /auto-train trước để fit GlobalScaler trên dữ liệu gốc."
+            ),
+        )
+    return gsm
+
+
 @router.post("", response_model=TrainResponse)
-def train_model(
-    payload: TrainRequest,
-):
+def train_model(payload: TrainRequest):
     """
     Khởi động workflow huấn luyện hoặc retrain cho một lớp.
 
-    Workflow:
-    1. Đọc 3 file CSV (samples/features/classes) từ đường dẫn đã upload.
-    2. Lọc lấy mẫu thuộc class_name.
-    3. Huấn luyện (hoặc retrain) model OC-SVM.
-    4. Ghi log vào SQLite.
+    Sử dụng GlobalScaler đã đóng băng để chuẩn hóa dữ liệu.
+    TUYỆT ĐỐI KHÔNG fit lại scaler – đảm bảo hệ quy chiếu nhất quán.
     """
     mc = get_mc_manager()
 
-    # Xác định đường dẫn file
     samples_file  = payload.samples_file
     features_file = payload.features_file
     classes_file  = payload.classes_file
 
     if not all([samples_file, features_file, classes_file]):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Phải cung cấp samples_file, features_file, classes_file (từ kết quả /upload).",
+            status_code=400,
+            detail="Phải cung cấp samples_file, features_file, classes_file.",
         )
 
-    # Load và validate dữ liệu
+    # Load dữ liệu thô
     try:
         X_full, feature_names, class_labels = load_and_validate_csv(
-            samples_file, features_file, classes_file  # type: ignore[arg-type]
+            samples_file, features_file, classes_file
         )
     except (FileNotFoundError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Lọc dữ liệu theo class_name
-    class_data = split_by_class(X_full, class_labels)
-    # Tìm class key tương ứng (chấp nhận lệch whitespace)
-    target_class = payload.class_name.strip()
-    matched_key = None
-    for k in class_data.keys():
-        if str(k).strip() == target_class:
-            matched_key = k
-            break
+    # Load GlobalScaler đóng băng → transform (KHÔNG fit lại)
+    gsm = _load_global_scaler()
+    try:
+        X_full_scaled = gsm.transform(X_full)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
+    # Tách theo lớp (đã scale)
+    class_data = split_by_class(X_full_scaled, class_labels)
+    target_class = payload.class_name.strip()
+    matched_key  = next(
+        (k for k in class_data if str(k).strip() == target_class), None
+    )
     if matched_key is None:
         available = [str(k) for k in class_data.keys()]
         raise HTTPException(
             status_code=400,
-            detail=f"Lớp '{payload.class_name}' không có trong dữ liệu (so khớp bằng strip). Số lớp có sẵn: {len(available)}",
+            detail=f"Lớp '{payload.class_name}' không có trong dữ liệu. Có sẵn: {available}",
         )
-    X = class_data[matched_key]
 
-    # Thực hiện huấn luyện
-    error_msg: str | None = None
+    X_scaled     = class_data[matched_key]
+    X_neg_list   = [v for k, v in class_data.items() if str(k).strip() != target_class]
+    X_neg_scaled = np.vstack(X_neg_list) if X_neg_list else None
+
+    # Thực hiện train / retrain
     info: dict = {}
     try:
         if payload.retrain:
             try:
                 info = mc.retrain_class(
-                    class_name  = payload.class_name,
-                    X_new       = X,
-                    new_version = payload.version_name,
+                    class_name   = payload.class_name,
+                    X_new_scaled = X_scaled,
+                    X_neg_scaled = X_neg_scaled,
+                    new_version  = payload.version_name,
                 )
             except ValueError as ve:
-                # Lỗi số features không khớp → 400 (lỗi người dùng, không phải server)
                 raise HTTPException(status_code=400, detail=str(ve))
             except Exception as e:
-                # Nếu là lỗi do chưa train bao giờ, tự động fallback sang train_class thông thường
-                if "chưa được train" in str(e).lower() or "không tìm thấy model" in str(e).lower() or "không tồn tại" in str(e).lower():
+                if any(kw in str(e).lower() for kw in ["chưa được train", "không tìm thấy", "không tồn tại"]):
                     info = mc.train_class(
                         class_name   = payload.class_name,
-                        X            = X,
+                        X_scaled     = X_scaled,
+                        X_neg_scaled = X_neg_scaled,
                         version_name = payload.version_name,
-                        nu           = payload.nu,
-                        gamma        = payload.gamma,
-                        kernel       = payload.kernel,
+                        nu=payload.nu, gamma=payload.gamma, kernel=payload.kernel,
                     )
                 else:
                     raise e
         else:
             info = mc.train_class(
                 class_name   = payload.class_name,
-                X            = X,
+                X_scaled     = X_scaled,
+                X_neg_scaled = X_neg_scaled,
                 version_name = payload.version_name,
-                nu           = payload.nu,
-                gamma        = payload.gamma,
-                kernel       = payload.kernel,
+                nu=payload.nu, gamma=payload.gamma, kernel=payload.kernel,
             )
-        log_status = "success"
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi khi huấn luyện: {e}")
 
@@ -145,39 +162,29 @@ def train_model(
 def get_classes_from_session(
     session_id: str = Query(..., description="session_id trả về sau khi upload CSV thô"),
 ):
-    """
-    Trả về danh sách lớp (unique) từ file classes.csv của một session đã xử lý.
-    Frontend dùng để tự động điền dropdown lớp cần train.
-    """
+    """Trả về danh sách lớp từ file classes.csv của một session."""
     processed_dir = os.getenv("PROCESSED_DIR", "data/processed")
-    # Đảm bảo đường dẫn tuyệt đối để không bị lỗi 404 khi đổi thư mục
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    classes_path = os.path.join(base_dir, processed_dir, session_id, "classes.csv")
+    base_dir      = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    classes_path  = os.path.join(base_dir, processed_dir, session_id, "classes.csv")
 
     if not os.path.exists(classes_path):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Không tìm thấy session '{session_id}' tại {classes_path}. Hãy upload CSV thô trước.",
+            status_code=404,
+            detail=f"Không tìm thấy session '{session_id}'. Hãy upload CSV thô trước.",
         )
 
     try:
         import pandas as pd
-        df = pd.read_csv(classes_path, header=0)
-        class_col = "class" if "class" in df.columns else df.columns[0]
+        df           = pd.read_csv(classes_path, header=0)
+        class_col    = "class" if "class" in df.columns else df.columns[0]
         unique_classes = sorted(df[class_col].astype(str).unique().tolist())
-        class_counts = df[class_col].astype(str).value_counts().to_dict()
+        class_counts   = df[class_col].astype(str).value_counts().to_dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi đọc classes.csv: {e}")
 
     return {
-        "session_id"     : session_id,
-        "unique_classes" : unique_classes,
-        "class_counts"   : class_counts,
-        "n_classes"      : len(unique_classes),
+        "session_id"    : session_id,
+        "unique_classes": unique_classes,
+        "class_counts"  : class_counts,
+        "n_classes"     : len(unique_classes),
     }
-
-
-
-
-
-

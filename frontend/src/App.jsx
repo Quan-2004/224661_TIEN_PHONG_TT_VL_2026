@@ -3,20 +3,21 @@ import './index.css';
 import Dashboard from './components/Dashboard';
 import TrainingPage from './components/TrainingPage';
 import UploadRawPage from './components/UploadRawPage';
-import TestCsvPage from './components/TestCsvPage';
+import SupportVectorPlot from './components/SupportVectorPlot';
+import TestCSVPage from './components/TestCSVPage';
 
 /**
  * App – Root component mOC-iSVM Frontend
- * Không yêu cầu đăng nhập – truy cập thẳng ứng dụng.
+ * Kiến trúc: Global Scaler + SV Pruning + Euclidean Tie-break
  */
 export default function App() {
   const [page, setPage] = useState('dashboard');
 
   const navItems = [
-    { id: 'dashboard',  label: 'Dashboard',          icon: '📊' },
-    { id: 'upload-raw', label: 'Upload CSV Thô',     icon: '📥', badge: 'Phase 0' },
-    { id: 'train',      label: 'Huấn luyện',         icon: '🎓' },
-    { id: 'test-csv',   label: 'Kiểm thử CSV',       icon: '🔬', badge: 'Mới' },
+    { id: 'dashboard',  label: 'Dashboard',       icon: '📊' },
+    { id: 'upload-raw', label: 'Train CSV',        icon: '🎓', badge: 'Pha 0→2' },
+    { id: 'test',       label: 'Test CSV',         icon: '🧪', badge: 'Pha 3' },
+    { id: 'sv-plot',    label: 'SV Map',           icon: '📌', badge: 'Debug' },
   ];
 
   return (
@@ -47,14 +48,31 @@ export default function App() {
             </button>
           ))}
         </nav>
+
+        {/* Architecture Info */}
+        <div style={{
+          marginTop: 'auto',
+          padding: '12px 16px',
+          borderTop: '1px solid var(--border-color)',
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          lineHeight: 1.6,
+        }}>
+          <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--text-secondary)' }}>
+            Kiến trúc
+          </div>
+          <div>🌐 Global Scaler</div>
+          <div>✂️ SV Age + Error Pruning</div>
+          <div>📐 Euclidean Tie-break</div>
+        </div>
       </aside>
 
       {/* Main Content */}
       <main className="main-content">
         {page === 'dashboard'  && <Dashboard />}
         {page === 'upload-raw' && <UploadRawPage />}
-        {page === 'train'      && <TrainingPage />}
-        {page === 'test-csv'   && <TestCsvPage />}
+        {page === 'test'       && <TestCSVPage />}
+        {page === 'sv-plot'    && <SupportVectorPlot />}
       </main>
     </div>
   );

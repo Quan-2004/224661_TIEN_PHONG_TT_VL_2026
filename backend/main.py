@@ -27,7 +27,7 @@ if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
 from backend.routers import upload, train, models_router, predict
-from backend.routers import upload_raw, auto_train, test_csv
+from backend.routers import upload_raw, auto_train
 from backend.schemas import ModelsListResponse
 from mocsvm.core.manifest_manager import ManifestManager
 
@@ -94,7 +94,6 @@ app.include_router(upload.router)
 app.include_router(train.router)
 app.include_router(models_router.router)
 app.include_router(predict.router)
-app.include_router(test_csv.router)
 
 
 # --------------------------------------------------------------------------

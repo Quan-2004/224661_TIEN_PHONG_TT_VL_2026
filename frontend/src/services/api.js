@@ -9,19 +9,13 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 // ---------- Base fetch wrapper ----------
 
 async function apiFetch(path, options = {}) {
-  const headers = {
-    ...options.headers,
-  };
+  const headers = { ...options.headers };
 
-  // Chỉ thêm Content-Type nếu không phải FormData
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers,
-  });
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: res.statusText }));
@@ -39,21 +33,14 @@ async function apiFetch(path, options = {}) {
 // ---------- Models ----------
 
 export const modelsAPI = {
-  /** Lấy danh sách tất cả model từ XML */
-  list: () => apiFetch('/models'),
-
-  /** Xem chi tiết model + training data */
-  detail: (className, limit = 100) =>
-    apiFetch(`/models/${encodeURIComponent(className)}?limit=${limit}`),
+  list:   ()                     => apiFetch('/models'),
+  detail: (className, limit=100) => apiFetch(`/models/${encodeURIComponent(className)}?limit=${limit}`),
 };
 
-// ---------- Upload ----------
+// ---------- Upload / Auto-Train ----------
 
 export const uploadAPI = {
-  /**
-   * Preview cột CSV – gọi trước khi xử lý để auto-detect cột
-   * @param {File} file
-   */
+  /** Preview cột CSV để auto-detect */
   previewCSV: (file) => {
     const form = new FormData();
     form.append('file', file);
@@ -61,51 +48,27 @@ export const uploadAPI = {
   },
 
   /**
-   * Upload 3 file CSV đã xử lý
-   */
-  uploadCSV: (samplesFile, featuresFile, classesFile) => {
-    const form = new FormData();
-    form.append('samples',  samplesFile);
-    form.append('features', featuresFile);
-    form.append('classes',  classesFile);
-
-    return apiFetch('/upload', { method: 'POST', body: form });
-  },
-
-  /**
-   * Phase 0 – Upload 1 file CSV thô → tiền xử lý tự động
-   * @param {File}   file   – File CSV thô
-   * @param {Object} config – { class_column, id_columns, drop_columns, scale }
-   */
-  uploadRaw: (file, config = {}) => {
-    const form = new FormData();
-    form.append('file',         file);
-    form.append('class_column', config.class_column   || 'state');
-    form.append('id_columns',   config.id_columns     || '[]');
-    form.append('drop_columns', config.drop_columns   || '[]');
-    form.append('scale',        config.scale !== false ? 'true' : 'false');
-
-    return apiFetch('/upload-raw', { method: 'POST', body: form });
-  },
-  /**
-   * Phase 0 + 1 – Upload 1 file CSV thô → tiền xử lý tự động + huấn luyện tất cả các class
-   * @param {File}   file   – File CSV thô
-   * @param {Object} config – Lựa chọn xử lý và SVM params
+   * Phase 0 + 1/2 – Upload 1 CSV thô → GlobalScaler fit → huấn luyện tất cả class
+   *
+   * Lưu ý: Backend tự fit GlobalScaler trên toàn bộ X trước khi chia class.
+   * Không cần truyền tham số scale nữa.
+   *
+   * config: { class_column, id_columns, drop_columns, kernel, nu, gamma,
+   *           version_name, age_threshold, error_threshold, retrain }
    */
   autoTrain: (file, config = {}) => {
     const form = new FormData();
-    form.append('file',         file);
-    form.append('class_column', config.class_column   || 'state');
-    form.append('id_columns',   config.id_columns     || '[]');
-    form.append('drop_columns', config.drop_columns   || '[]');
-    form.append('scale',        config.scale !== false ? 'true' : 'false');
-    
-    // Training params
-    form.append('kernel',       config.kernel       || 'rbf');
-    form.append('nu',           config.nu           || 0.1);
-    form.append('gamma',        config.gamma        || 'scale');
-    form.append('version_name', config.version_name || 'v1.0');
-
+    form.append('file',            file);
+    form.append('class_column',    config.class_column    || 'state');
+    form.append('id_columns',      config.id_columns      || '[]');
+    form.append('drop_columns',    config.drop_columns    || '[]');
+    form.append('kernel',          config.kernel          || 'rbf');
+    form.append('nu',              config.nu              ?? 0.05);
+    form.append('gamma',           config.gamma           || 'scale');
+    form.append('version_name',    config.version_name    || 'v1.0');
+    form.append('age_threshold',   config.age_threshold   ?? 5);
+    form.append('error_threshold', config.error_threshold ?? 0.5);
+    form.append('retrain',         config.retrain !== false ? 'true' : 'false');
     return apiFetch('/auto-train', { method: 'POST', body: form });
   },
 };
@@ -113,33 +76,35 @@ export const uploadAPI = {
 // ---------- Training ----------
 
 export const trainAPI = {
-  /**
-   * Kích hoạt training workflow
-   * @param {Object} params
-   */
-  train: (params) =>
-    apiFetch('/train', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    }),
-
-  /**
-   * Lấy danh sách lớp từ session đã upload CSV thô (Phase 0)
-   * @param {string} sessionId
-   */
+  train:      (params)    => apiFetch('/train', { method: 'POST', body: JSON.stringify(params) }),
   getClasses: (sessionId) => apiFetch(`/train/classes?session_id=${sessionId}`),
 };
 
 // ---------- Predict ----------
 
 export const predictAPI = {
-  /** Lấy thông tin các lớp đang active */
+  /** Thông tin model active + trạng thái GlobalScaler */
   info: () => apiFetch('/predict/info'),
 
-  /** Chạy suy luận (OvR) với tuỳ chọn trả về plot data */
-  predict: (payload) => 
-    apiFetch('/predict', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    }),
+  /**
+   * Dự đoán từ mảng dữ liệu thô (chưa scale).
+   * Backend tự load GlobalScaler và transform.
+   */
+  predict: (payload) =>
+    apiFetch('/predict', { method: 'POST', body: JSON.stringify(payload) }),
+
+  /**
+   * Phase 3 – Upload test.csv → scale → predict → báo cáo
+   * config: { class_column, min_margin, return_csv }
+   */
+  predictCSV: (file, config = {}) => {
+    const form = new FormData();
+    form.append('file',         file);
+    form.append('class_column', config.class_column || '');
+    form.append('min_margin',   config.min_margin   ?? 0.0);
+    form.append('return_csv',   config.return_csv   ? 'true' : 'false');
+    return apiFetch('/predict/csv', { method: 'POST', body: form });
+  },
+
+  reload: () => apiFetch('/predict/reload', { method: 'POST' }),
 };

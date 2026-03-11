@@ -146,6 +146,7 @@ async def upload_raw_csv(
     # Dùng đường dẫn tuyệt đối quay về gốc dự án mOC-isvm2/ để đồng bộ với train.py
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     output_dir = os.path.join(base_dir, PROCESSED_DIR, session_id)
+    model_dir  = os.path.join(base_dir, os.getenv("MODEL_DIR", "models"))
 
     # Chạy DataProcessor
     try:
@@ -154,6 +155,7 @@ async def upload_raw_csv(
             id_columns   = id_cols,
             drop_columns = drop_cols,
             scale        = scale,
+            model_dir    = model_dir,
         )
         report = processor.process(csv_path=raw_csv_path, output_dir=output_dir)
 

@@ -22,7 +22,7 @@ export default function TrainingPage() {
   const [params, setParams] = useState({
     class_name: '',
     kernel: 'rbf',
-    nu: 0.1,
+    nu: 0.05,
     gamma: 'scale',
     retrain: false,
   });

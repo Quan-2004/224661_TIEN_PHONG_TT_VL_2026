@@ -1,50 +1,72 @@
-import { useState, useCallback } from "react";
+import { useState, useRef } from 'react';
+import { predictAPI, uploadAPI } from '../services/api';
 
-const API = "http://localhost:8000";
-
-// Màu sắc cho từng class (xoay vòng)
-const CLASS_COLORS = [
-  { bg: "rgba(79,142,247,0.12)",   border: "rgba(79,142,247,0.4)",  text: "#4f8ef7",  label: "blue"   },
-  { bg: "rgba(52,211,153,0.12)",   border: "rgba(52,211,153,0.4)",  text: "#34d399",  label: "green"  },
-  { bg: "rgba(167,139,250,0.12)",  border: "rgba(167,139,250,0.4)", text: "#a78bfa",  label: "purple" },
-  { bg: "rgba(34,211,238,0.12)",   border: "rgba(34,211,238,0.4)",  text: "#22d3ee",  label: "cyan"   },
-];
-const UNKNOWN_COLOR = { bg: "rgba(251,146,60,0.12)", border: "rgba(251,146,60,0.4)", text: "#fb923c" };
-
-export default function TestCsvPage() {
-  const [file, setFile]       = useState(null);
+/**
+ * TestCSVPage – Phase 3: Luồng Kiểm Thử (Test Workflow)
+ * ======================================================
+ * Upload file test.csv → Backend tự động:
+ *   1. Load GlobalScaler đóng băng → transform X_test
+ *   2. Đưa qua tất cả model song song
+ *   3. Phân xử bằng Euclidean Nearest-SV Tie-break
+ *   4. Trả về nhãn dự đoán ŷ + báo cáo
+ */
+export default function TestCSVPage() {
+  const [file, setFile] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const [classColumn, setClassColumn] = useState('');
+  const [availableColumns, setAvailableColumns] = useState([]);
+  const [minMargin, setMinMargin] = useState(0.0);
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
-  const [result, setResult]   = useState(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const fileRef = useRef();
 
-  const reset = () => { setFile(null); setResult(null); setError(null); };
+  const handleFile = async (f) => {
+    if (!f || !f.name.endsWith('.csv')) {
+      setError('Chỉ chấp nhận file .csv');
+      return;
+    }
+    setFile(f);
+    setError('');
+    setResult(null);
+    setAvailableColumns([]);
+    setClassColumn('');
 
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    setDragOver(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f?.name.endsWith(".csv")) { setFile(f); setError(null); setResult(null); }
-    else setError("Chỉ chấp nhận file .csv");
-  }, []);
-
-  const handleFileChange = (e) => {
-    const f = e.target.files?.[0];
-    if (f) { setFile(f); setError(null); setResult(null); }
+    // Đọc tên cột qua API preview
+    setPreviewing(true);
+    try {
+      const pv = await uploadAPI.previewCSV(f);
+      if (pv && pv.columns) {
+        setAvailableColumns(pv.columns.map(c => c.name));
+        if (pv.suggested?.class_column) {
+            setClassColumn(pv.suggested.class_column);
+        }
+      }
+    } catch (err) {
+      console.error("Lỗi đọc cột CSV:", err);
+    } finally {
+      setPreviewing(false);
+    }
   };
 
-  const handleSubmit = async () => {
-    if (!file) return;
-    setLoading(true); setError(null); setResult(null);
-    const fd = new FormData();
-    fd.append("csv_file", file);
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    handleFile(e.dataTransfer.files[0]);
+  };
+
+  const handlePredict = async () => {
+    if (!file) { setError('Chưa chọn file test.csv'); return; }
+    setLoading(true);
+    setError('');
+    setResult(null);
     try {
-      const res = await fetch(`${API}/test-csv/upload`, { method: "POST", body: fd });
-      if (!res.ok) {
-        const e2 = await res.json();
-        throw new Error(e2.detail || "Lỗi server");
-      }
-      setResult(await res.json());
+      const data = await predictAPI.predictCSV(file, {
+        class_column: classColumn.trim() || undefined,
+        min_margin:   minMargin,
+      });
+      setResult(data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -52,249 +74,297 @@ export default function TestCsvPage() {
     }
   };
 
-  // Tính tổng & phần trăm
-  const total = result ? Object.values(result.results_summary).reduce((a, b) => a + b, 0) : 0;
-  const entries = result
-    ? Object.entries(result.results_summary).sort((a, b) => b[1] - a[1])
-    : [];
+  const predClasses     = result ? [...new Set(result.results.map(r => r.predicted_class))] : [];
+  const labelDist       = result?.label_distribution || {};
+  const unknownCount    = result?.n_unknown || 0;
+  const totalCount      = result?.n_samples || 0;
+  const knownCount      = totalCount - unknownCount;
 
-  let colorIdx = 0;
+  const getLabelColor = (label) => {
+    if (label === 'unknown') return '#ef4444';
+    if (label.startsWith('low_confidence/')) return '#f59e0b';
+    return '#22c55e';
+  };
 
   return (
-    <div style={{ animation: "fadeIn .35s ease" }}>
-      {/* ── Header ── */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{
-          display: "inline-flex", alignItems: "center", gap: 10,
-          background: "rgba(79,142,247,0.1)", border: "1px solid rgba(79,142,247,0.25)",
-          borderRadius: 10, padding: "6px 14px", marginBottom: 14,
-        }}>
-          <span style={{ fontSize: 15 }}>🔬</span>
-          <span style={{ color: "var(--accent-blue)", fontSize: 13, fontWeight: 600 }}>Logic Test – One-vs-Rest</span>
-        </div>
-        <h2 style={{ fontSize: 26, fontWeight: 800, color: "var(--text-primary)", marginBottom: 8, letterSpacing: "-0.5px" }}>
-          Kiểm thử Dữ liệu CSV Mới
-        </h2>
-        <p style={{ color: "var(--text-secondary)", fontSize: 14, maxWidth: 600 }}>
-          Tải lên file CSV chứa dữ liệu cần phân loại. Hệ thống OvR sẽ quét qua tất cả các model đã huấn luyện và trả về nhãn lớp cho từng dòng.
+    <div>
+      <div className="page-header">
+        <h1 className="page-title">🧪 Kiểm Thử CSV (Phase 3)</h1>
+        <p className="page-subtitle">
+          Upload file test.csv thô → GlobalScaler scale → OC-SVM predict → Kết quả phân loại
         </p>
       </div>
 
-      {/* ── Upload Card ── */}
-      <div style={{
-        background: "var(--bg-card)", border: "1px solid var(--border-color)",
-        borderRadius: 16, padding: 28, marginBottom: 24, backdropFilter: "blur(12px)",
-      }}>
-        <div style={{ marginBottom: 18, display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 18 }}>📂</span>
-          <span style={{ fontWeight: 700, fontSize: 16, color: "var(--text-primary)" }}>Chọn File Dữ Liệu</span>
+      {/* Upload Zone */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div className="card-header">
+          <div className="card-title">📂 File Test CSV</div>
         </div>
 
-        {/* Drop Zone */}
         <div
+          className={`upload-zone ${dragOver ? 'active' : ''}`}
+          style={{
+            border: `2px dashed ${dragOver ? 'var(--accent-blue)' : 'var(--border-color)'}`,
+            borderRadius: 12,
+            padding: 40,
+            textAlign: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            background: dragOver ? 'rgba(59,130,246,0.07)' : 'var(--bg-secondary)',
+            marginBottom: 20,
+          }}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
-          style={{
-            border: `2px dashed ${dragOver ? "var(--accent-blue)" : file ? "var(--accent-green)" : "var(--border-color)"}`,
-            borderRadius: 12, padding: "36px 24px", textAlign: "center",
-            background: dragOver
-              ? "rgba(79,142,247,0.07)"
-              : file ? "rgba(52,211,153,0.06)" : "rgba(255,255,255,0.02)",
-            transition: "var(--transition)", cursor: "pointer",
-            position: "relative",
-          }}
-          onClick={() => !file && document.getElementById("csv-input").click()}
+          onClick={() => fileRef.current?.click()}
         >
-          <input id="csv-input" type="file" accept=".csv" onChange={handleFileChange} style={{ display: "none" }} />
+          <div style={{ fontSize: 40, marginBottom: 8 }}>{file ? '📄' : '📥'}</div>
           {file ? (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
-              <div style={{
-                width: 48, height: 48, borderRadius: 10,
-                background: "rgba(52,211,153,0.15)", display: "flex",
-                alignItems: "center", justifyContent: "center", fontSize: 22,
-              }}>📄</div>
-              <div style={{ textAlign: "left" }}>
-                <div style={{ fontWeight: 700, color: "var(--accent-green)", fontSize: 15 }}>{file.name}</div>
-                <div style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 2 }}>
-                  {(file.size / 1024).toFixed(1)} KB &nbsp;·&nbsp; Sẵn sàng kiểm thử
-                </div>
+            <>
+              <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 15 }}>
+                {file.name}
               </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); reset(); }}
-                style={{
-                  marginLeft: "auto", background: "rgba(248,113,113,0.1)",
-                  border: "1px solid rgba(248,113,113,0.3)", color: "var(--accent-red)",
-                  borderRadius: 7, width: 32, height: 32, cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
-                }}
-              >✕</button>
-            </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
+                {(file.size / 1024).toFixed(1)} KB – Click để đổi file
+              </div>
+            </>
           ) : (
             <>
-              <div style={{ fontSize: 36, marginBottom: 10 }}>
-                {dragOver ? "🎯" : "📁"}
+              <div style={{ color: 'var(--text-muted)', fontSize: 14 }}>
+                Kéo thả file <strong>test.csv</strong> vào đây hoặc click để chọn
               </div>
-              <div style={{ color: "var(--text-primary)", fontWeight: 600, fontSize: 15, marginBottom: 6 }}>
-                {dragOver ? "Thả file vào đây!" : "Kéo & Thả file CSV vào đây"}
+              <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 6 }}>
+                File không cần cột nhãn – hệ thống sẽ dự đoán tự động
               </div>
-              <div style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 18 }}>
-                hoặc nhấn để chọn file từ máy tính
-              </div>
-              <span style={{
-                display: "inline-block", padding: "8px 20px",
-                background: "rgba(79,142,247,0.12)", border: "1px solid rgba(79,142,247,0.3)",
-                borderRadius: 8, color: "var(--accent-blue)", fontWeight: 600, fontSize: 13,
-              }}>
-                Duyệt File...
-              </span>
             </>
           )}
         </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv"
+          style={{ display: 'none' }}
+          onChange={(e) => handleFile(e.target.files[0])}
+        />
 
-        {/* Error */}
-        {error && (
-          <div className="alert alert-error" style={{ marginTop: 16 }}>
-            <span>⚠️</span> {error}
+        {/* Config options */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 8 }}>
+          <div style={{ position: 'relative' }}>
+            <label className="form-label">
+              Cột nhãn thật (tuỳ chọn)
+              <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6 }}>
+                – để tính accuracy
+              </span>
+            </label>
+            {previewing ? (
+                 <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: 8 }}>
+                    <span className="spinner" style={{ width: 14, height: 14, marginRight: 8 }} /> Đang đọc cột...
+                 </div>
+            ) : availableColumns.length > 0 ? (
+                <div style={{ position: 'relative' }}>
+                    <select
+                        className="form-control"
+                        value={classColumn}
+                        onChange={(e) => setClassColumn(e.target.value)}
+                        style={{ cursor: 'pointer', appearance: 'none' }}
+                    >
+                        <option value="">-- Không chọn (Chỉ dự đoán) --</option>
+                        {availableColumns.map(col => (
+                            <option key={col} value={col}>{col}</option>
+                        ))}
+                    </select>
+                    <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-muted)'}}>▼</div>
+                </div>
+            ) : (
+                <input
+                  className="form-control"
+                  placeholder='Ví dụ: "state", "label", "class"'
+                  value={classColumn}
+                  onChange={(e) => setClassColumn(e.target.value)}
+                  disabled={!file}
+                />
+            )}
           </div>
+          <div>
+            <label className="form-label">
+              Biên độ phân xử (min_margin)
+              <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 6 }}>
+                – 0 = tắt
+              </span>
+            </label>
+            <input
+              className="form-control"
+              type="number"
+              step="0.01"
+              min="0"
+              max="1"
+              value={minMargin}
+              onChange={(e) => setMinMargin(parseFloat(e.target.value) || 0)}
+            />
+          </div>
+        </div>
+
+        {error && (
+          <div className="alert alert-error" style={{ marginTop: 16 }}>⚠️ {error}</div>
         )}
 
-        {/* Run Button */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
           <button
-            onClick={handleSubmit}
-            disabled={!file || loading}
             className="btn btn-primary"
-            style={{ minWidth: 160, justifyContent: "center", fontSize: 14, padding: "11px 24px" }}
+            onClick={handlePredict}
+            disabled={loading || !file}
+            style={{ minWidth: 160 }}
           >
             {loading ? (
-              <>
-                <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }}></span>
-                <span>Đang phân loại...</span>
-              </>
+              <><span className="spinner" style={{ width: 16, height: 16, marginRight: 8 }} />Đang dự đoán...</>
             ) : (
-              <><span>🚀</span> Bắt đầu Kiểm thử</>
+              '🚀 Chạy Kiểm Thử'
             )}
           </button>
+          {file && (
+            <button
+              className="btn btn-outline"
+              onClick={() => { setFile(null); setResult(null); setError(''); }}
+            >
+              ✕ Xoá file
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ── Kết quả ── */}
+      {/* Results */}
       {result && (
-        <div style={{ animation: "slideUp .35s ease" }}>
-          {/* Tổng quan */}
-          <div style={{
-            display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-            gap: 14, marginBottom: 24,
-          }}>
+        <>
+          {/* Summary Stats */}
+          <div className="stat-grid" style={{ marginBottom: 24 }}>
             <div className="stat-card">
               <div className="stat-icon blue">📊</div>
               <div className="stat-info">
-                <div className="stat-value">{total}</div>
-                <div className="stat-label">Tổng mẫu test</div>
+                <div className="stat-value">{totalCount.toLocaleString()}</div>
+                <div className="stat-label">Tổng mẫu</div>
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon green">✅</div>
+              <div className="stat-icon" style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>✅</div>
               <div className="stat-info">
-                <div className="stat-value">
-                  {entries.filter(([k]) => k.toLowerCase() !== "unknown").reduce((s, [, v]) => s + v, 0)}
-                </div>
+                <div className="stat-value">{knownCount.toLocaleString()}</div>
                 <div className="stat-label">Đã phân loại</div>
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon orange">❓</div>
+              <div className="stat-icon" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>❓</div>
               <div className="stat-info">
-                <div className="stat-value">{result.results_summary["unknown"] ?? 0}</div>
-                <div className="stat-label">Dữ liệu lạ (Unknown)</div>
+                <div className="stat-value">{unknownCount.toLocaleString()}</div>
+                <div className="stat-label">Unknown Concept</div>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-icon purple">🏷️</div>
-              <div className="stat-info">
-                <div className="stat-value">{entries.filter(([k]) => k.toLowerCase() !== "unknown").length}</div>
-                <div className="stat-label">Số lớp phát hiện</div>
+            {result.accuracy != null && (
+              <div className="stat-card">
+                <div className="stat-icon orange">🎯</div>
+                <div className="stat-info">
+                  <div className="stat-value">{(result.accuracy * 100).toFixed(1)}%</div>
+                  <div className="stat-label">Độ chính xác</div>
+                </div>
               </div>
+            )}
+          </div>
+
+          {/* Label Distribution */}
+          <div className="card" style={{ marginBottom: 24 }}>
+            <div className="card-header">
+              <div className="card-title">📈 Phân phối nhãn dự đoán</div>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {result.n_classes_active} model active · GlobalScaler: {result.scaler_info?.n_features} features
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, padding: '8px 0' }}>
+              {Object.entries(labelDist).sort((a, b) => b[1] - a[1]).map(([label, count]) => (
+                <div key={label} style={{
+                  background: 'var(--bg-tertiary)',
+                  borderRadius: 10,
+                  padding: '10px 18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  border: '1px solid var(--border-color)',
+                }}>
+                  <span style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: getLabelColor(label), flexShrink: 0,
+                  }} />
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>
+                    {label}
+                  </span>
+                  <span style={{
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 6, padding: '2px 8px',
+                    fontSize: 13, color: 'var(--text-muted)', fontFamily: 'monospace',
+                  }}>
+                    {count} ({((count / totalCount) * 100).toFixed(1)}%)
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Chi tiết từng lớp */}
-          <div style={{
-            background: "var(--bg-card)", border: "1px solid var(--border-color)",
-            borderRadius: 16, padding: 28, marginBottom: 24,
-          }}>
-            <h3 style={{ fontWeight: 700, fontSize: 16, marginBottom: 20, color: "var(--text-primary)" }}>
-              Phân bổ theo Lớp
-            </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {entries.map(([className, count]) => {
-                const isUnknown = className.toLowerCase() === "unknown";
-                const color = isUnknown ? UNKNOWN_COLOR : CLASS_COLORS[colorIdx++ % CLASS_COLORS.length];
-                const pct = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
-                return (
-                  <div key={className}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Results Table */}
+          <div className="card">
+            <div className="card-header">
+              <div className="card-title">📋 Chi tiết kết quả dự đoán</div>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                Hiển thị {Math.min(200, result.results.length)} / {result.results.length} mẫu
+              </span>
+            </div>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Nhãn dự đoán ŷ</th>
+                    <th>Confidence</th>
+                    {result.results[0]?.true_class != null && <th>Nhãn thật</th>}
+                    {result.results[0]?.correct != null && <th>Đúng/Sai</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.results.slice(0, 200).map((r, i) => (
+                    <tr key={i}>
+                      <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{i + 1}</td>
+                      <td>
                         <span style={{
-                          display: "inline-flex", padding: "3px 10px",
-                          background: color.bg, border: `1px solid ${color.border}`,
-                          borderRadius: 20, color: color.text, fontSize: 12, fontWeight: 600,
+                          display: 'inline-block',
+                          padding: '3px 10px',
+                          borderRadius: 6,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          background: getLabelColor(r.predicted_class) + '22',
+                          color: getLabelColor(r.predicted_class),
+                          border: `1px solid ${getLabelColor(r.predicted_class)}44`,
                         }}>
-                          {isUnknown ? "❓ Unknown" : `🏷️ ${className}`}
+                          {r.predicted_class}
                         </span>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <span style={{ color: "var(--text-muted)", fontSize: 13 }}>{pct}%</span>
-                        <span style={{ fontWeight: 700, color: "var(--text-primary)", fontSize: 16, minWidth: 40, textAlign: "right" }}>
-                          {count}
-                        </span>
-                        <span style={{ color: "var(--text-muted)", fontSize: 12 }}>mẫu</span>
-                      </div>
-                    </div>
-                    <div style={{
-                      height: 8, borderRadius: 4, background: "rgba(255,255,255,0.06)", overflow: "hidden"
-                    }}>
-                      <div style={{
-                        height: "100%", width: `${pct}%`,
-                        background: color.text, borderRadius: 4,
-                        transition: "width 0.8s cubic-bezier(0.4, 0, 0.2, 1)",
-                        opacity: 0.8,
-                      }} />
-                    </div>
-                  </div>
-                );
-              })}
+                        {r.is_low_confidence && (
+                          <span style={{ marginLeft: 6, fontSize: 11, color: '#f59e0b' }}>⚠</span>
+                        )}
+                      </td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                        {(r.confidence * 100).toFixed(2)}%
+                      </td>
+                      {r.true_class != null && (
+                        <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{r.true_class}</td>
+                      )}
+                      {r.correct != null && (
+                        <td style={{ fontSize: 18 }}>
+                          {r.correct ? '✅' : '❌'}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-
-          {/* Download */}
-          <div style={{
-            background: "rgba(79,142,247,0.06)", border: "1px solid rgba(79,142,247,0.2)",
-            borderRadius: 14, padding: "20px 24px",
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-            flexWrap: "wrap",
-          }}>
-            <div>
-              <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
-                📋 File Kết quả Chi tiết
-              </div>
-              <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
-                Mỗi dòng dữ liệu kèm nhãn dự đoán và điểm Decision Score của từng lớp
-              </div>
-            </div>
-            <a
-              href={`${API}${result.download_url}`}
-              download="test_results_detailed.csv"
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-primary"
-              style={{ textDecoration: "none", whiteSpace: "nowrap" }}
-            >
-              <span>⬇️</span> Tải File .CSV
-            </a>
-          </div>
-        </div>
+        </>
       )}
     </div>
   );
