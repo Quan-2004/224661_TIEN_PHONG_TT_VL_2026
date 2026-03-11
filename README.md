@@ -4,320 +4,161 @@
 
 **Modified One-Class Incremental Support Vector Machine**
 
-A complete MLOps system for multi-class anomaly detection using incremental One-Class SVM with a modern web interface.
+_A pure algorithmic research project implementing multi-class anomaly detection via an incremental One-Class SVM approach._
 
-[![Python](https://img.shields.io/badge/Python-3.10-3776AB?logo=python&logoColor=white)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.5-F7931E?logo=scikit-learn&logoColor=white)](https://scikit-learn.org)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![React](https://img.shields.io/badge/React-19.2-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.5+-F7931E?logo=scikit-learn&logoColor=white)](https://scikit-learn.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-success.svg)](https://opensource.org/licenses/MIT)
+
+[Overview](#overview) • [Core Algorithm](#core-algorithm) • [Installation](#installation) • [Data Structures](#data-structures)
 
 </div>
 
 ---
 
-## Table of Contents
+## 📖 Overview
 
-- [Overview](#overview)
-- [Features](#features)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Running the App](#running-the-app)
-- [API Reference](#api-reference)
-- [How It Works](#how-it-works)
-- [Tech Stack](#tech-stack)
-- [Contributing](#contributing)
-- [License](#license)
+**mOC-iSVM** constitutes a dedicated, pure algorithmic implementation designed to solve multi-class anomaly detection utilizing an **incremental One-Class SVM (One-vs-Rest strategy)**.
 
----
+Traditional Support Vector Machine (SVM) algorithms demand a full dataset retraining from scratch every time new data points emerge. To resolve this inefficiency, mOC-iSVM incorporates an **incremental learning mechanism** that retains explicit Support Vectors from previous training iterations, making it highly robust and drastically reducing computational overhead during continuous data influx.
 
-## Overview
+The architecture comprises a foundational ML package (`mocsvm`), exposed interactively via a lightweight FastAPI backend and visualized seamlessly using React.
 
-**mOC-iSVM** is a research-oriented MLOps platform that implements a **multi-class incremental One-Class SVM** (One-vs-Rest strategy). Instead of retraining from scratch, the system learns incrementally by retaining only Support Vectors between training sessions, making it efficient for continuous learning scenarios.
+## 🧠 Core Algorithm: How It Works
 
-The system provides a full-stack web interface for:
+### Incremental Target Learning
 
-- Uploading raw CSV datasets and auto-training class models
-- Visualizing model details and support vectors
-- Running inference on new data with detailed confidence scores
-- Managing model versions via an XML-based model registry
+At its core, `mOC-iSVM` instantiates a distinct `IncrementalOCSVM` object assigned to each detected classification class. Upon initiating a model retraining sequence:
 
----
+1. **Extraction**: Preceding Support Vectors (the bounding threshold data points defining the hypersphere boundary) are efficiently loaded from serialized `.pkl` arrays.
+2. **Aggregation**: Newly ingested data bounds are structurally appended strictly to these legacy Support Vectors.
+3. **Execution**: A succeeding scikit-learn `OneClassSVM` kernel executes optimization fitting exclusively over this minimized footprint dataset.
+4. **Distillation**: The output isolates new Support Vectors which overwrite the prior records.
 
-## Features
+By only caching bounding Support Vectors instead of full datasets, memory utilization and optimization compute times undergo exponential reduction over extensive lifecycle loops.
 
-- 🧠 **Incremental Learning** — Only Support Vectors are stored between sessions, enabling efficient retraining
-- 🔁 **Auto Train Pipeline** — Upload raw CSV → preprocess → train/retrain all classes automatically
-- 📊 **PCA Visualization** — 2D scatter plot of Support Vectors per class
-- 🗂️ **Model Registry** — XML manifest tracks all model versions with metadata
-- 🔐 **JWT Authentication** — Secure login/register with role-based access (admin/user)
-- 📁 **CSV Testing** — Upload new CSV files and batch-classify all rows
-- 📈 **Training History** — Full audit log of all training sessions
+### One-vs-Rest (OvR) Inference Logic
 
----
+Prediction evaluates unstructured data across all distinct incremental class models concurrently.
 
-## Architecture
+1. Computing individual Decision Scores per OC-SVM.
+2. The maximal positive score dictates the predicted label.
+3. System outputs an "Unknown" classification if all margins yield negatively, accurately flagging anomaly occurrences.
 
-```
-┌──────────────────────────────────────────────┐
-│            FRONTEND (React + Vite)            │
-│  Dashboard │ Train │ Upload │ Test │ Inference │
-└─────────────────────┬────────────────────────┘
-                      │ HTTP REST API (JWT)
-┌─────────────────────▼────────────────────────┐
-│           BACKEND (FastAPI + Python)          │
-│  /auth  /upload  /train  /models  /predict   │
-│            SQLite (users + logs)              │
-└──────────┬───────────────────┬───────────────┘
-           │                   │
-    ┌──────▼──────┐    ┌───────▼──────┐
-    │   mocsvm/   │    │   models/    │
-    │  Core ML    │    │  *.pkl files │
-    │  Library    │    │  manifest.xml│
-    └─────────────┘    └──────────────┘
-```
+## ✨ Technical Features
 
----
+- **Algorithmic Primacy**: Focused completely on the ML matrix math and modeling; stripped of bloated databases or extraneous authentication logic.
+- **🔄 Auto Train Pipeline**: Upload raw CSV matrices → Auto-preprocess → System trains/retrains all detected bounds dynamically.
+- **📊 Dimensionality Reduction**: Real-time Principal Component Analysis (PCA) maps multidimensional Support Vectors into 2D scatter visualizations.
+- **🗂️ Stateless Model Registry**: A declarative XML-based paradigm records tuning hyperparameters (`gamma`, `nu`, `kernel`) linking to distinct sequential `.pkl` versions.
+- **🧪 Batch Heuristics**: Extensive pipeline logic designed to ingest full unclassified CSV datasets to simulate large-scale testing (OvR).
 
-## Project Structure
-
-```
-mOC-iSVM/
-├── mocsvm/                      # Core ML Library (Python package)
-│   ├── core/
-│   │   ├── incremental.py       # IncrementalOCSVM – single-class model
-│   │   ├── multiclass.py        # MultiClassOCSVM – One-vs-Rest wrapper
-│   │   └── manifest_manager.py  # XML model registry manager
-│   └── utils/
-│       └── data_loader.py       # CSV validation & preprocessing
-│
-├── backend/                     # FastAPI Application
-│   ├── main.py                  # App entry point & middleware
-│   ├── schemas.py               # Pydantic request/response models
-│   ├── requirements.txt         # Python dependencies
-│   ├── .env                     # Environment variables (not committed)
-│   └── routers/
-│       ├── upload.py            # /upload – processed CSV upload
-│       ├── upload_raw.py        # /upload-raw – raw CSV upload
-│       ├── auto_train.py        # /auto-train – full pipeline
-│       ├── train.py             # /train – manual training
-│       ├── predict.py           # /predict – inference
-│       ├── models_router.py     # /models – model listing & details
-│       └── test_csv.py          # /test-csv – batch CSV classification
-│
-├── frontend/                    # React Web Application
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Dashboard.jsx       # Model overview & stats
-│   │   │   ├── TrainingPage.jsx    # Manual train/retrain UI
-│   │   │   ├── UploadRawPage.jsx   # Auto-train pipeline UI
-│   │   │   ├── TestCsvPage.jsx     # CSV batch testing UI
-│   │   │   └── ModelDetailModal.jsx # Model details & scatter plot
-│   │   ├── services/api.js         # Centralized API client
-│   │   └── index.css               # Global dark-mode styles
-│   ├── package.json
-│   └── vite.config.js
-│
-├── models/                      # Trained model files
-│   ├── *.pkl                    # Serialized model per class
-│   └── manifest.xml             # Model version registry
-│
-├── data/
-│   ├── uploads/                 # Uploaded CSV files
-│   └── processed/               # Preprocessed CSV files
-│
-├── setup.py                     # Package setup for mocsvm
-├── DEPLOYMENT.md                # Production deployment guide
-└── README.md
-```
-
----
-
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
 
-| Tool    | Version |
-| ------- | ------- |
-| Python  | 3.10+   |
-| Node.js | 18+     |
-| npm     | 9+      |
+- **Python:** 3.10+
+- **Node.js:** 18.x+
 
-### Installation
+### Installation & Execution
 
-**1. Clone the repository**
+1. **Clone the repository**
 
-```bash
-git clone https://github.com/Quan-2004/mOC-iSVM.git
-cd mOC-iSVM
-```
+   ```bash
+   git clone https://github.com/Quan-2004/mOC-iSVM.git
+   cd mOC-iSVM
+   ```
 
-**2. Set up the Python environment**
+2. **Initialize Python Environment**
 
-```bash
-python -m venv .venv
+   ```bash
+   python -m venv .venv
 
-# Windows
-.venv\Scripts\activate
+   # Windows:
+   .venv\Scripts\activate
+   # Linux/macOS:
+   source .venv/bin/activate
 
-# Linux / macOS
-source .venv/bin/activate
+   pip install -r backend/requirements.txt
 
-pip install -r backend/requirements.txt
-pip install -e .   # install the mocsvm package in editable mode
-```
+   # Emplace core algorithmic library globally
+   pip install -e .
+   ```
 
-**3. Configure environment variables**
+3. **Start the API Server**
 
-```bash
-# backend/.env (already provided, edit as needed)
-SECRET_KEY=your-secret-key
-DATABASE_URL=sqlite:///./mocsvm.db
-```
+   ```bash
+   # From project root
+   uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+   ```
 
-**4. Set up the frontend**
+4. **Start the Visualizer Frontend**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
 
-```bash
-cd frontend
-npm install
-```
+### Application URLs
 
-### Running the App
-
-Run both services in separate terminals:
-
-```bash
-# Terminal 1 – Backend
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-```bash
-# Terminal 2 – Frontend
-cd frontend
-npm run dev
-```
-
-| Service            | URL                         |
-| ------------------ | --------------------------- |
-| Web App            | http://localhost:5173       |
-| API Docs (Swagger) | http://localhost:8000/docs  |
-| API Docs (ReDoc)   | http://localhost:8000/redoc |
+- **Web Analytics UI:** [http://localhost:5173](http://localhost:5173)
+- **Algorithm API Docs (Swagger):** [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
 
-## API Reference
+## 📂 Algorithmic Data Structures
 
-### Authentication
+Ensure inputted CSV pipelines match structural heuristics for matrix parsing.
 
-| Method | Endpoint         | Auth | Description               |
-| ------ | ---------------- | ---- | ------------------------- |
-| `POST` | `/auth/register` | ❌   | Register a new user       |
-| `POST` | `/auth/login`    | ❌   | Login → returns JWT token |
-| `GET`  | `/auth/me`       | ✅   | Get current user info     |
+### 1. `samples.csv` (Dense Feature Matrix)
 
-### Data & Training
+A strict numerical matrix lacking header delineations.
 
-| Method | Endpoint         | Auth | Description                                |
-| ------ | ---------------- | ---- | ------------------------------------------ |
-| `POST` | `/upload`        | ✅   | Upload preprocessed CSV per class          |
-| `POST` | `/upload-raw`    | ✅   | Upload raw CSV, auto-split by class        |
-| `POST` | `/auto-train`    | ✅   | Full pipeline: upload + preprocess + train |
-| `POST` | `/train`         | ✅   | Manually train or retrain a class model    |
-| `GET`  | `/train/history` | ✅   | List all past training sessions            |
-
-### Models & Inference
-
-| Method | Endpoint               | Auth | Description                         |
-| ------ | ---------------------- | ---- | ----------------------------------- |
-| `GET`  | `/models`              | ❌   | List all registered models          |
-| `GET`  | `/models/{class_name}` | ❌   | Get model details + support vectors |
-| `POST` | `/predict`             | ❌   | Classify a single data vector       |
-| `POST` | `/predict/reload`      | ❌   | Reload models from disk             |
-| `POST` | `/test-csv`            | ❌   | Batch classify all rows in a CSV    |
-
-> Full interactive documentation available at `http://localhost:8000/docs`
-
----
-
-## How It Works
-
-### Incremental Learning
-
-Each class has its own `IncrementalOCSVM` model. When retraining:
-
-1. The existing model's **Support Vectors** are loaded from the `.pkl` file
-2. New training data is **merged** with the stored Support Vectors
-3. A new OC-SVM is fitted on the combined data
-4. Only the resulting **Support Vectors** are saved back — keeping memory footprint minimal
-
-### Model Registry (XML)
-
-`models/manifest.xml` is the central registry. Every train/retrain operation:
-
-- Creates a new versioned `.pkl` file (e.g., `classname-02.pkl`)
-- Updates the manifest with metadata (kernel, nu, gamma, n_samples, trained_at)
-- Allows the backend to always load the **latest version** of each model
-
-```xml
-<manifest updated="2026-03-10T12:00:00">
-    <model class_name="Successful" version="Successful-02">
-        <pkl_path>models/Successful-02.pkl</pkl_path>
-        <metadata>
-            <kernel>rbf</kernel>
-            <gamma>scale</gamma>
-            <nu>0.1</nu>
-            <n_samples>150</n_samples>
-            <trained_at>2026-03-10T10:00:00</trained_at>
-        </metadata>
-    </model>
-</manifest>
+```csv
+1.2,0.5,3.1,2.0
+1.8,0.3,2.9,1.7
+2.1,0.2,3.3,1.9
 ```
 
-### One-vs-Rest Inference
+### 2. `features.csv` (Feature Dimensions)
 
-When predicting a new sample, **every class model** is evaluated. The system:
+Explicit 1D vector mapping to sequence columns.
 
-1. Computes the decision score from each OC-SVM
-2. Returns the class with the **highest positive score** as the prediction
-3. Reports "unknown" if all scores are negative (sample belongs to no known class)
+```csv
+feature_1,feature_2,feature_3,feature_4
+```
+
+### 3. `classes.csv` (Target Vector Object)
+
+1D string array denoting sequential targets corresponding directly to the `samples.csv` bounds. No headers.
+
+```csv
+successful
+successful
+failed
+```
+
+_Note: The platform provides an `Upload CSV Thô` (Raw CSV) functionality that inherently splits and parses unified datasets based on the final column._
 
 ---
 
-## Tech Stack
+## 🤝 Contributing
 
-| Layer         | Technology                          |
-| ------------- | ----------------------------------- |
-| ML Core       | scikit-learn, numpy, pandas         |
-| Backend       | FastAPI, SQLAlchemy, SQLite         |
-| Auth          | JWT (python-jose), bcrypt (passlib) |
-| Frontend      | React 18, Vite, Vanilla CSS         |
-| Serialization | joblib (`.pkl`), XML (manifest)     |
+This algorithmic repository encourages ML engineering research expansions.
 
----
-
-## Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature-name`
-3. Commit your changes: `git commit -m 'feat: add some feature'`
-4. Push to the branch: `git push origin feature/your-feature-name`
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/Optimization`)
+3. Commit Changes (`git commit -m 'feat: Enhance matrix parsing'`)
+4. Push to the Branch (`git push origin feature/Optimization`)
 5. Open a Pull Request
 
-Please follow [Conventional Commits](https://www.conventionalcommits.org/) for commit messages.
+## 📄 License
 
----
-
-## License
-
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
-
----
+Distributed under the MIT License. See `LICENSE` for more information.
 
 <div align="center">
-Made with ❤️ for research on incremental One-Class SVM
+<br/>
+<em>Pioneered for advanced research on incremental One-Class SVM strategies.</em>
 </div>
