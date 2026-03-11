@@ -3,7 +3,7 @@ import './index.css';
 import Dashboard from './components/Dashboard';
 import TrainingPage from './components/TrainingPage';
 import UploadRawPage from './components/UploadRawPage';
-import InferenceTestPage from './components/InferenceTestPage';
+import TestCsvPage from './components/TestCsvPage';
 
 /**
  * App – Root component mOC-iSVM Frontend
@@ -16,7 +16,7 @@ export default function App() {
     { id: 'dashboard',  label: 'Dashboard',          icon: '📊' },
     { id: 'upload-raw', label: 'Upload CSV Thô',     icon: '📥', badge: 'Phase 0' },
     { id: 'train',      label: 'Huấn luyện',         icon: '🎓' },
-    { id: 'inference',  label: 'Kiểm thử (Inference)', icon: '🧪' },
+    { id: 'test-csv',   label: 'Kiểm thử CSV',       icon: '🔬', badge: 'Mới' },
   ];
 
   return (
@@ -54,7 +54,7 @@ export default function App() {
         {page === 'dashboard'  && <Dashboard />}
         {page === 'upload-raw' && <UploadRawPage />}
         {page === 'train'      && <TrainingPage />}
-        {page === 'inference'  && <InferenceTestPage />}
+        {page === 'test-csv'   && <TestCsvPage />}
       </main>
     </div>
   );

@@ -137,3 +137,9 @@ test_*.csv
 *_output*.txt
 test_out*.txt
 demo_output.txt
+
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
